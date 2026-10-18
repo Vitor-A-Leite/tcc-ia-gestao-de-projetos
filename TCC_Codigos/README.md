@@ -116,3 +116,15 @@ Consulte o README da raiz para preparar o ambiente local. Não é necessário
 usar Drive, Colab ou Jupyter. O comando `scripts/run_local.py` executa os notebooks
 como Python comum e resolve os caminhos relativos ao repositório. Os experimentos
 requerem `requirements-experiments.txt`; chamadas reais exigem `--allow-api`.
+
+## Baseline estável V2 e conjuntos experimentais
+
+O piloto usa somente os seis novos casos `DEV001`–`DEV006` em
+`TCC_Codigos/data/scenarios_development_pilot.json` (caminho a partir da raiz).
+Os 36 casos `S001`–`S036` de `scenarios_ground_truth.json` permanecem no test set
+oficial. Prompt, modelo e ground truth não podem mudar após o congelamento
+experimental. `RUN_FULL_EXPERIMENT` permanece falso por padrão.
+
+Veja [o protocolo e a revisão do ground truth](docs/baseline_v2_methodology.md), incluindo a limitação
+de exposição histórica dos casos oficiais e a distinção entre a tag técnica
+`baseline-v2-frozen` e a aprovação experimental pelos autores.
