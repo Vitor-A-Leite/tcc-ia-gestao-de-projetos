@@ -78,3 +78,34 @@ O código do baseline não chama automaticamente nenhuma API. Isso é intenciona
 Abra [o explorador interativo offline](visualizacao/grafo_projeto.html) no navegador.
 Há busca, zoom, legenda e exploração de relações direcionadas. Para regenerar e
 entender a navegação, veja [as instruções da visualização](visualizacao/README.md).
+
+## Testes offline do notebook 3 e do pipeline
+
+Com Python 3.10 ou superior, sem instalar pacotes e sem usar a chave da API,
+a partir da raiz deste projeto:
+
+```bash
+python3 TCC_Codigos/scripts/test_offline.py
+```
+
+O comando executa os testes originais e as regressões do notebook 3. A rede é
+bloqueada durante os testes. As funções são extraídas diretamente das células do
+notebook; a montagem do Drive, instalação de pacotes e configuração real da API
+não são executadas. Respostas do cliente OpenAI são simuladas, inclusive para os
+36 cenários de referência. A apresentação em DataFrame é substituída por uma
+lista nos testes; isso valida a lógica, mas não a interface do Colab nem o LLM.
+
+Eventos `informational` não geram entidades impactadas, documentos ou caminhos.
+A avaliação completa exige um registro por ID de cenário, sem faltantes,
+duplicatas ou IDs desconhecidos; tentativas que falharam não são removidas.
+A validação da interpretação rejeita listas nulas, IDs inválidos, responsáveis
+que não sejam pessoas, datas inválidas e confiança fora do contrato.
+Registros de erro de interpretação preservam a resposta bruta, o ID da resposta,
+o tempo e a etapa da falha para auditoria.
+
+## Credenciais locais
+
+A chave local fica em `.env` na raiz superior do projeto TCC, fora do notebook e
+ignorada pelo Git. O arquivo deve permanecer privado. Os testes offline não o
+carregam. No Colab, continue usando `OPENAI_API_KEY` em Secrets (ou na variável de
+ambiente da sessão): o `.env` local não é enviado nem carregado automaticamente.

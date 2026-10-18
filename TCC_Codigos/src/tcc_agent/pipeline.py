@@ -11,6 +11,16 @@ class HybridImpactPipeline:
         self.max_depth = max_depth
 
     def analyze(self, event: Event) -> ImpactResult:
+        # Informações sem efeito gerencial não iniciam propagação, mesmo
+        # quando mencionam entidades conhecidas do projeto (ex.: S035).
+        if event.event_type == "informational":
+            return ImpactResult(
+                event=event,
+                impacted_entities=[],
+                affected_artifacts=[],
+                trace={},
+            )
+
         seeds = []
         if event.primary_entity:
             seeds.append(event.primary_entity)
