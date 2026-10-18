@@ -90,8 +90,7 @@ python3 TCC_Codigos/scripts/test_offline.py
 
 O comando executa os testes originais e as regressões do notebook 3. A rede é
 bloqueada durante os testes. As funções são extraídas diretamente das células do
-notebook; a montagem do Drive, instalação de pacotes e configuração real da API
-não são executadas. Respostas do cliente OpenAI são simuladas, inclusive para os
+notebook; a instalação de pacotes e a configuração real da API não são executadas. Respostas do cliente OpenAI são simuladas, inclusive para os
 36 cenários de referência. A apresentação em DataFrame é substituída por uma
 lista nos testes; isso valida a lógica, mas não a interface do Colab nem o LLM.
 
@@ -107,5 +106,13 @@ o tempo e a etapa da falha para auditoria.
 
 A chave local fica em `.env` na raiz superior do projeto TCC, fora do notebook e
 ignorada pelo Git. O arquivo deve permanecer privado. Os testes offline não o
-carregam. No Colab, continue usando `OPENAI_API_KEY` em Secrets (ou na variável de
-ambiente da sessão): o `.env` local não é enviado nem carregado automaticamente.
+carregam. Os experimentos locais carregam esse arquivo automaticamente. A execução e os
+resultados usam apenas a cópia local do repositório. O secret de GitHub Actions
+é separado e só fica disponível a workflows que o referenciem explicitamente.
+
+## Execução exclusivamente pelo repositório
+
+Consulte o README da raiz para preparar o ambiente local. Não é necessário
+usar Drive, Colab ou Jupyter. O comando `scripts/run_local.py` executa os notebooks
+como Python comum e resolve os caminhos relativos ao repositório. Os experimentos
+requerem `requirements-experiments.txt`; chamadas reais exigem `--allow-api`.
