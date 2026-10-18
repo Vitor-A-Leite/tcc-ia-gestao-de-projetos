@@ -72,3 +72,9 @@ pytest -q
 ## Observação metodológica
 
 O código do baseline não chama automaticamente nenhuma API. Isso é intencional: permite escolher o LLM, registrar versão/modelo/parâmetros e preservar a reprodutibilidade do experimento.
+
+## Visualizar o grafo do projeto
+
+Abra [o explorador interativo offline](visualizacao/grafo_projeto.html) no navegador.
+Há busca, zoom, legenda e exploração de relações direcionadas. Para regenerar e
+entender a navegação, veja [as instruções da visualização](visualizacao/README.md).
