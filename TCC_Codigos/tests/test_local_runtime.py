@@ -66,7 +66,10 @@ class LocalRuntimeTests(unittest.TestCase):
                         continue
                     code = ''.join(cell['source'])
                     ast.parse(code)
-                    for forbidden in ['google.colab', '/content/', 'drive.mount', '!pip', '%cd']:
+                    forbidden_patterns = ['/content/', 'drive.mount', '!pip', '%cd']
+                    if path.name != 'TCC_Baseline_LLM.ipynb':
+                        forbidden_patterns.append('google.colab')
+                    for forbidden in forbidden_patterns:
                         self.assertNotIn(forbidden, code)
                 bootstrap = next(''.join(c['source']) for c in nb['cells']
                                  if c['cell_type'] == 'code' and 'REPO_ROOT = next(' in ''.join(c['source']))
@@ -79,6 +82,47 @@ class LocalRuntimeTests(unittest.TestCase):
                         ns = {}
                         exec(bootstrap, ns)
                     self.assertEqual(ns['PROJECT_DIR'], clone / 'TCC_Codigos')
+
+    def test_baseline_colab_bootstrap_clones_and_reuses_checkout(self):
+        from types import ModuleType
+        notebook = json.loads((ROOT.parent / 'TCC_Baseline_LLM.ipynb').read_text())
+        bootstrap = next(''.join(c['source']) for c in notebook['cells']
+                         if c['cell_type'] == 'code' and 'REPO_ROOT = next(' in ''.join(c['source']))
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            clone = cwd / 'tcc-ia-gestao-de-projetos'
+            commands = []
+
+            def run(command, **kwargs):
+                self.assertTrue(kwargs['check'])
+                commands.append(command)
+                if command[:2] == ['git', 'clone']:
+                    (clone / 'TCC_Codigos/data').mkdir(parents=True)
+                    (clone / 'TCC_Codigos/data/project_graph.json').write_text('{}')
+
+            with patch('pathlib.Path.cwd', return_value=cwd), patch('subprocess.run', side_effect=run), patch.dict(sys.modules, {'pandas': ModuleType('pandas'), 'google.colab': ModuleType('google.colab')}), patch.object(sys, 'path', list(sys.path)), redirect_stdout(io.StringIO()):
+                first = {}
+                exec(bootstrap, first)
+                second = {}
+                exec(bootstrap, second)
+            self.assertEqual(first['PROJECT_DIR'], clone / 'TCC_Codigos')
+            self.assertEqual(second['PROJECT_DIR'], first['PROJECT_DIR'])
+            self.assertEqual(sum(command[:2] == ['git', 'clone'] for command in commands), 1)
+            self.assertEqual(sum('pip' in command for command in commands), 2)
+
+    def test_baseline_reads_colab_secret_without_printing_it(self):
+        from types import ModuleType, SimpleNamespace
+        notebook = json.loads((ROOT.parent / 'TCC_Baseline_LLM.ipynb').read_text())
+        cell = ''.join(notebook['cells'][5]['source'])
+        fake_openai = ModuleType('openai')
+        fake_openai.OpenAI = lambda **kwargs: kwargs
+        ns = {'REPO_ROOT': ROOT.parent, 'colab': object(), 'os': os,
+              'importlib': __import__('importlib')}
+        output = io.StringIO()
+        with patch.dict(os.environ, {}, clear=True), patch.dict(sys.modules, {'openai': fake_openai}), patch('tcc_agent.local_runtime.load_local_env'), patch('importlib.import_module', return_value=SimpleNamespace(get=lambda name: 'test-secret')), redirect_stdout(output):
+            exec(cell, ns)
+        self.assertEqual(ns['client']['api_key'], 'test-secret')
+        self.assertNotIn('test-secret', output.getvalue())
 
     def test_terminal_runner_refuses_api_without_explicit_flag(self):
         path = ROOT / 'scripts/run_local.py'
