@@ -117,14 +117,46 @@ usar Drive, Colab ou Jupyter. O comando `scripts/run_local.py` executa os notebo
 como Python comum e resolve os caminhos relativos ao repositório. Os experimentos
 requerem `requirements-experiments.txt`; chamadas reais exigem `--allow-api`.
 
-## Baseline estável V2 e conjuntos experimentais
+## Piloto isolado com acompanhamento
 
-O piloto usa somente os seis novos casos `DEV001`–`DEV006` em
-`TCC_Codigos/data/scenarios_development_pilot.json` (caminho a partir da raiz).
-Os 36 casos `S001`–`S036` de `scenarios_ground_truth.json` permanecem no test set
-oficial. Prompt, modelo e ground truth não podem mudar após o congelamento
-experimental. `RUN_FULL_EXPERIMENT` permanece falso por padrão.
+O executor abaixo reutiliza as funções e prompts dos notebooks, mas roda apenas
+os seis casos do piloto por condição, sem repetir o S001 como teste extra. Não
+modifica os prompts nem o protocolo. Ele exige uma pasta de saída nova e salva
+cada resposta imediatamente. Em caso de falha da API, para sem repetir a chamada.
 
-Veja [o protocolo e a revisão do ground truth](docs/baseline_v2_methodology.md), incluindo a limitação
-de exposição histórica dos casos oficiais e a distinção entre a tag técnica
-`baseline-v2-frozen` e a aprovação experimental pelos autores.
+```sh
+# Validação com respostas de referência injetadas e rede bloqueada:
+python TCC_Codigos/scripts/run_pilots.py --mode simulated --output caminho/novo_simulado
+
+# Exatamente seis chamadas por condição; pode gerar cobrança:
+python TCC_Codigos/scripts/run_pilots.py --mode real --allow-api --output caminho/novo_real
+```
+
+São preservados manifestos com versões de pacotes, hashes dos arquivos,
+modelo, prompt, IDs de resposta, uso de tokens e métricas do piloto. Os seis
+casos não substituem o experimento completo de 36 cenários. Métricas simuladas
+não são evidência de desempenho do LLM. O modo simulado requer as dependências
+de experiments para gerar as tabelas, mas não usa credenciais nem rede.
+
+## Protocolo V2 de suficiência de evidência
+
+Há uma implementação separada para avaliar impacto em prazo e custo, distinguindo
+impacto sustentado, ausência sustentada e informação insuficiente. As duas
+condições usam o mesmo contrato e avaliador, com controle das evidências visíveis.
+Veja [regras, limites científicos e execução](docs/protocolo_evidencias_v2.md).
+Os exemplos são de desenvolvimento e aguardam revisão independente. A demonstração
+não chama a API nem substitui os resultados do piloto anterior.
+
+### Revisão de prazo e custo V2.1
+
+Os [critérios revisados e limites da avaliação](docs/revisao_criterios_gabaritos_v2_1.md)
+e os [gabaritos autorais dos 36 cenários](data/reference_sets/alfa_schedule_cost_v2_1_draft.json)
+estão preparados para revisão independente. A auditoria é local, sem API:
+
+```sh
+.venv/bin/python TCC_Codigos/scripts/audit_schedule_cost_references.py --output TCC_Codigos/outputs/nova_revisao
+```
+
+O pacote exporta perguntas sem respostas e um caderno de revisão. Os custos permanecem
+indeterminados por ausência de evidência; o conjunto ainda não é um benchmark equilibrado.
+Esses arquivos não devem ser enviados ao runner V2.0 sem adaptação para medida e escopo.

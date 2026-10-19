@@ -77,15 +77,3 @@ experimentos; nenhum workflow de execução paga foi criado.
 
 Abra `TCC_Codigos/visualizacao/grafo_projeto.html` no navegador, sem servidor.
 Instruções específicas em `TCC_Codigos/visualizacao/README.md`.
-
-## Baseline estável V2 e conjuntos experimentais
-
-O piloto usa somente os seis novos casos `DEV001`–`DEV006` em
-`TCC_Codigos/data/scenarios_development_pilot.json` (caminho a partir da raiz).
-Os 36 casos `S001`–`S036` de `scenarios_ground_truth.json` permanecem no test set
-oficial. Prompt, modelo e ground truth não podem mudar após o congelamento
-experimental. `RUN_FULL_EXPERIMENT` permanece falso por padrão.
-
-Veja [o protocolo e a revisão do ground truth](TCC_Codigos/docs/baseline_v2_methodology.md), incluindo a limitação
-de exposição histórica dos casos oficiais e a distinção entre a tag técnica
-`baseline-v2-frozen` e a aprovação experimental pelos autores.
