@@ -160,3 +160,18 @@ estão preparados para revisão independente. A auditoria é local, sem API:
 O pacote exporta perguntas sem respostas e um caderno de revisão. Os custos permanecem
 indeterminados por ausência de evidência; o conjunto ainda não é um benchmark equilibrado.
 Esses arquivos não devem ser enviados ao runner V2.0 sem adaptação para medida e escopo.
+
+### Avaliador V2.2 e casos adicionais
+
+O [protocolo V2.2](docs/protocolo_evidencias_v2_2.md) distingue início, entrega,
+progresso, término, duração e disponibilidade por entidade, escopo e base de dias.
+Há [34 casos hipotéticos adicionais](data/evidence_protocol_v2_2_cases.json), com
+92 perguntas por condição, incluindo aumento, redução e manutenção de prazo/custo.
+Os gabaritos são autorais e aguardam revisão independente; não são fatos do Projeto Alfa.
+
+```sh
+.venv/bin/python TCC_Codigos/scripts/evaluate_evidence_protocol.py --cases TCC_Codigos/data/evidence_protocol_v2_2_cases.json --output TCC_Codigos/outputs/nova_validacao_v2_2
+```
+
+Essa demonstração é offline e não mede uma IA. A seleção de versão é explícita;
+os casos V2.0 continuam disponíveis e as anotações V2.1 não são convertidas automaticamente.

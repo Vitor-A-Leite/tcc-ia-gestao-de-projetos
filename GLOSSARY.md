@@ -41,3 +41,9 @@ Entidade, atividade e dimensão específicas abrangidas por uma afirmação. Uma
 
 **Linha de base comparável**:
 Referência anterior para a mesma atividade, medida, escopo e calendário usada ao calcular uma variação. Uma data isolada não informa a diferença em relação ao planejado.
+
+**Base de dias**:
+Convenção usada para medir intervalos ou desvios de prazo, como dias corridos ou úteis. Comparações exigem uma base compatível; converter entre bases depende do calendário aplicável.
+
+**Variação líquida de custo**:
+Diferença entre o custo total atual e o custo de referência dentro do escopo definido, considerando todas as parcelas que variam. Uma mudança de preço unitário isolada não determina essa diferença.

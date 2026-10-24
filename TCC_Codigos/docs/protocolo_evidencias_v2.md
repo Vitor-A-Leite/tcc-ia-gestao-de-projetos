@@ -209,3 +209,7 @@ essas medidas e continua restrito aos modelos declarados dos exemplos de desenvo
 Não converter automaticamente os novos gabaritos para `schedule_delta_days` genérico.
 Foram preparadas referências autorais dos 36 relatos; faltam revisão independente,
 cobertura financeira e casos reservados antes do próximo experimento real.
+
+O [avaliador V2.2](protocolo_evidencias_v2_2.md) já oferece medidas e escopos
+explícitos para os novos casos hipotéticos, por seleção de versão. O V2.0 permanece
+restrito aos exemplos e hipóteses acima, sem inferir retrospectivamente suas medidas.

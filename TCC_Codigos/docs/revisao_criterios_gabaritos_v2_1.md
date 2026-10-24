@@ -170,3 +170,11 @@ Os pacotes V2.1 são de revisão, não arquivos de execução do runner antigo. 
 
 A liberação para experimento exige revisão independente das referências, cobertura adequada,
 casos reservados e executor/avaliador compatíveis, com hashes da configuração congelada.
+
+## Continuação em 22/10/2026
+
+O [protocolo V2.2](protocolo_evidencias_v2_2.md) implementa avaliação por escopo,
+medida e base de dias e acrescenta 34 casos hipotéticos de desenvolvimento.
+Ele resolve a limitação de identidade do avaliador para os novos casos, preservando
+o V2.0 e este conjunto V2.1 sem migração automática. A revisão independente e os
+casos reservados para o experimento final continuam pendentes.

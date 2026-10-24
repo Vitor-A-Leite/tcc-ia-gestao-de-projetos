@@ -27,7 +27,7 @@ class ProjectGraph:
     def entity_name(self, entity_id: str) -> str:
         return self.nodes.get(entity_id, {}).get("name", entity_id)
 
-    def downstream(self, start_ids: list[str], max_depth: int = 4) -> tuple[list[str], dict[str, list[str]]]:
+    def downstream(self, start_ids: list[str], max_depth: int = 4, on_step=None) -> tuple[list[str], dict[str, list[str]]]:
         """Retorna entidades a jusante e o caminho usado para alcançá-las.
 
         O método usa busca em largura (BFS). A profundidade máxima evita que
@@ -51,6 +51,9 @@ class ProjectGraph:
                 new_path = path + [target]
                 impacted.append(target)
                 trace[target] = new_path
+                if on_step is not None:
+                    on_step({"source": current, "target": target, "relation": edge["type"],
+                             "path": new_path, "depth": depth + 1})
                 queue.append((target, depth + 1, new_path))
 
         return impacted, trace
