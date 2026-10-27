@@ -1,0 +1,42 @@
+--- orquestracao_antes.py
++++ orquestracao_condicional.py
+@@ -198,7 +198,7 @@
+                     corpo = {k: v for k, v in a.items() if k not in ('execucao', 'decisoes')}
+                     validar(corpo, c)  # nunca confiar no validador alegado pelo interpretador/cache
+                     if politica.resolver is None or not politica.resolver(deepcopy(c), deepcopy(corpo)):
+-                        pendencias.append('Revisão semântica pendente: ' + n)
++                        pendencias.append(('Autorização operacional pendente: ' if getattr(politica,'modo_condicional',False) else 'Revisão semântica pendente: ') + n)
+                         bloqueados.add(n)
+                     else:
+                         propostas.extend(deepcopy(a['propostas']))
+@@ -217,13 +217,15 @@
+             if n in bloqueados:
+                 registro.update(quantitativo={}, estado='requer_revisao')
+             else:
+-                registro['estado'] = 'validado_pela_politica'
++                registro['estado'] = 'autorizado_operacional_condicional' if getattr(politica,'modo_condicional',False) else 'validado_pela_politica'
+             registro['propostas_refs'] = [p['id'] for p in propostas if p.get('no_id') == n]
+             registro['fatos_evento_refs'] = [dict(fonte_id=f['id'], localizador=f['localizador']) for f in ev['evidencias']] if n in candidatos else []
+             registro['fonte_refs'] = next(x['fonte_refs'] for x in e['entidades'] if x['id'] == n)
+             registros[n] = registro
+         if perf_counter() - inicio > politica.max_tempo_s:
+             pendencias.append('Tempo total excedido; transporte deve cumprir timeout próprio')
++        if getattr(politica,'modo_condicional',False):
++            pendencias.extend(politica.verificar_fechamento())
+         if pendencias:
+             resultado = dict(execucao_id=politica.execucao_id, execucao={'estado': 'parcial', 'erros': []},
+                              completude={'prazo': 'parcial', 'custo': 'parcial'}, lacunas=list(dict.fromkeys(pendencias)))
+@@ -265,6 +267,13 @@
+         if base is not None:
+             resultado['fim_base'] = base[e['marco_final_id']]['fim'].saida()
+             resultado['custo_base'] = deepcopy(e['linha_base']['custo_centavos'])
++        if getattr(politica,'modo_condicional',False):
++            resultado.update(natureza_previsao='condicional_original',suporte_semantico='nao_auditado',contrato_politica=politica.versao,registro_operacional=deepcopy(politica.registro_operacional))
++            for decisao in resultado.get('decisoes',[]):
++                decisao.update(suporte_semantico='nao_auditado',motivos=['Aplicação operacional condicional; suporte será auditado posteriormente'])
++            for no in resultado.get('resultados_nos',[]):
++                for decisao in no.get('decisoes',[]):
++                    decisao.update(suporte_semantico='nao_auditado',motivos=['Aplicação operacional condicional; suporte será auditado posteriormente'])
+         return resultado
+     except (ValueError, AssertionError, KeyError, TypeError, StopIteration) as exc:
+         resultado = dict(execucao_id=politica.execucao_id, projeto_id=e.get('projeto_id'), versao=e.get('versao'), evento_id=ev.get('evento_id'), execucao={'estado': 'erro', 'erros': [{'codigo': 'INTEGRACAO_INVALIDA', 'mensagem': str(exc)}]}, rastro_orquestracao=rastro, registros_correntes=list(registros.values()), consumo={'chamadas': chamadas, 'analises': len(analises), 'observacoes_novas': observados, 'latencia_ms': round((perf_counter()-inicio)*1000, 3)})

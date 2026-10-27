@@ -1,0 +1,13 @@
+# Coorte v04 aprovada — etapa 9
+
+Autorização humana transmitida pelo coordenador em 26/10/2026: retomar com v04, deadline180s e teto acumuladoUS$5, para revisão antes de avançar. Registro canônico pré-geração em coorte_v04/slots_v04 no SQLite original; adendo.json e manifesto.json exportados antes da primeira chamada. 15 casos × B/H/T × duas repetições =90 novos slots, com mesmos dados/views e ordem de seis permutações balanceadas do plano histórico. B/T mantêm os prompts anteriores; H usa LocalV04 e contrato descritivo4.0, sem relaxar validação ou corrigir respostas.
+
+gpt-6-luna, reasoning high, Standard/default, cache30m, entrada≤16000 por contagem oficial do novo payload, saída total≤25000 incluindo reasoning, sem ferramentas/fallback/retries. Deadline180s inclui contagem e inferência. H mantém até8 análises/chamadas, com limite total1500s =8×180+60s de processamento local; nenhuma ampliação de seleção. Sete nós Íris e oito Nácar resultam em estimativa284novas chamadas numa passagem completa,299agregadas com as15anteriores. É teto de passagem, não promessa de realização: dependentes podem ser bloqueados por resultados originais.
+
+Mesmo ledger/lock e transações BEGIN IMMEDIATE, cap global300 e tetoUS$5, mantendo compromisso prévioUS$0,172820515. Cada nova tentativa reservaUS$0,0165: inferênciaUS$0,0145 +provisão hipotética contagemUS$0,002; usage válido concilia inferência e mantém provisão. Não há nova carteira ou liberação de reservas antigas. Custos/provisões não representam fatura.
+
+Guarda antecipada: parar após5timeouts consecutivos na nova coorte; interromper em falha HTTP/autenticação/parâmetro/protocolo/usage ou integração, preservando estado e reservas. Falhas de formato/aceitação operacional são resultados, sem retry. Slots iniciados não são reenviados; queda exige revisão. Limite global impede novo envio e mantém restante explicitamente pendente por parada. Parada histórica v03 permanece intacta; a autorização nova é representada por parada_v04 separada.
+
+Testes offline: quatro testes em cópia do SQLite validaram registro, persistência, concorrência, replay, soma de gastos, cap por slot/financeiro, guarda e divergência de manifesto. Dois testes direcionados já existentes confirmaram igualdade de conteúdo entre contagem e geração, hashHTTP final e rejeição original intacta. Nenhuma rede/chave nos testes. Fonte histórica e formato v04 conferidos por hash antes da coleta.
+
+Suporte semântico não auditado. Referências autorais, inferibilidade pendente; nenhuma conclusão científica ou correção de previsão durante coleta. Resultados v03 e diagnóstico não entram nas métricas v04. Etapas10/11 não autorizadas nesta execução. Sem commit/push/deploy.

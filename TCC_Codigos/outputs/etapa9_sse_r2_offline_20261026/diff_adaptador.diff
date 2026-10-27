@@ -1,0 +1,35 @@
+--- piloto_real/Responses.__call__ (historico intacto)
++++ retomada_v04_sse/ResponsesSSE.__call__
+@@ -10,7 +10,7 @@
+             mensagens[0]['conteudo'] += ('\nContrato operacional condicional2.0: IDs de propostas devem ser únicos em toda a execução; prefixe cada id com no_id e um índice local. Use os efeitos_canonicos copiados da mensagem. Interprete todas as cláusulas locais de duração e readequação do catálogo; ausência de proposta não resolve cláusula obrigatória. Aplique confirmação somente se sua interpretação declarar a condição confirmada. Sem resolução, proponha conhecimento indeterminado e lacuna explícita. IDs de obrigação com prefixo lacuna_ servem apenas para registrar_lacuna_custo, nunca para cobrança exata. Não acrescente campos fora do schema. Toda conclusão é original condicional e será auditada depois; não alegue revisão humana.')
+         # Mesmo modelo/input/reasoning/text nas duas operações. Nenhum truncamento.
+         comum=dict(model=MODELO,input=[dict(role='system' if m['papel']=='sistema' else 'user',content=m['conteudo']) for m in mensagens],reasoning=deepcopy(CONFIG['reasoning']),text={'format':{'type':'json_object'}})
+-        payload=dict(**comum,max_output_tokens=25000,service_tier='default',prompt_cache_options={'ttl':'30m'},tools=[],store=False,truncation='disabled')
++        payload=dict(**comum,stream=True,max_output_tokens=25000,service_tier='default',prompt_cache_options={'ttl':'30m'},tools=[],store=False,truncation='disabled')
+         # Limite de bytes é proteção de memória/HTTP, não estimador de tokens.
+         if len(json.dumps(payload,ensure_ascii=False).encode())>100000:raise FalhaTransporte('entrada_grande','Payload excede proteção local de bytes; não foi enviado nem contado')
+         try:id=self.ledger.reservar(self.slot,hash_json(payload))
+@@ -31,6 +31,7 @@
+             self.ledger.enviar(id)
+             bruto=self.redator(self.http.post('',payload,deadline-monotonic()))
+             registro['response']=bruto
++            registro['transporte_sse']=deepcopy(getattr(self.http,'ultimo_sse',None))
+             self.ultimo=bruto
+             # Medição é independente da validade do conteúdo. Falta de usage mantém
+             # a reserva, mas não apaga uma previsão entregue pelo provedor.
+@@ -51,6 +52,7 @@
+                 u=bruto.get('usage') or {}
+                 limites_violados=(type(u.get('input_tokens'))is int and u['input_tokens']>16000) or (type(u.get('output_tokens'))is int and u['output_tokens']>25000)
+                 if divergencia or limites_violados:self.ledger.parar('Modelo/tier/cache observado divergente; revisar sem repetir')
++            if bruto.get('status')in ('failed','incomplete'):self.ledger.parar('Terminal SSE '+bruto['status']+'; sem previsão parcial/retry')
+             textos=[];recusa=False
+             for item in bruto.get('output',[]):
+                 if item.get('type')=='message':
+@@ -62,6 +64,7 @@
+         except BaseException as exc:
+             # Inclui interrupção antes/depois do envio; reserva nunca é liberada sem usage.
+             registro['erro']=getattr(exc,'codigo','falha_sanitizada')
++            registro['transporte_sse']=deepcopy(getattr(self.http,'ultimo_sse',None))
+             registro['falha_transporte']=self.redator(getattr(exc,'metadados',{}))
+             if getattr(exc,'metadados',{}).get('status_http') in (401,403):self.ledger.parar('Autenticação recusada; não repetir o lote')
+             self.ledger.desconhecido(id,registro)
