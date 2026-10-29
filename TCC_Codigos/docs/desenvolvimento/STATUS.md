@@ -1,8 +1,95 @@
 # Status do desenvolvimento
 
-Atualizado em 27/10/2026 (America/Sao_Paulo).
+## Vigência — etapa 12 concluída, 28/10/2026
 
-## Resumo vigente — 27/10/2026
+**Três entregáveis concluídos:** [demonstração local](../../entregas/etapa12/demonstracao/index.html), [material editável para o TCC](../../entregas/etapa12/material_tcc/Material_para_redacao_TCC.docx) e [pacote para o orientador](../../entregas/etapa12/Pacote_orientador.zip). [Índice da entrega](../../entregas/etapa12/COMECE_AQUI.html) e [verificação técnica](../../entregas/etapa12/ACEITE_ETAPA12.md).
+
+A demonstração apresenta os três casos finais, nove resultados e 18 análises H salvos, com fontes, propagação, parcelas e comparação B/H/T. O material de redação possui oito páginas; o roteiro do orientador, cinco páginas e formulário humano em branco. O ZIP inclui 33 cópias de evidências, manifesto e verificador portátil; 50 arquivos conferidos, sem credenciais nem banco financeiro integral.
+
+Testes locais cobriram 12 combinações caso/área, 18 passos H, fontes e três exportações; 11 requisições HTTP e a verificação após extração passaram. As 13 páginas dos documentos foram inspecionadas. A validação visual da demonstração em navegador real não pôde ser concluída por indisponibilidade do host de automação e captura nativa sem conteúdo; essa limitação está registrada, sem declarar aprovação visual.
+
+**Zero novas chamadas pagas.** Carteira idêntica em bytes: compromisso **US$ 4,567653865**, saldo **US$ 0,432346135**, teto US$ 5. Os 253 artefatos congelados da etapa 10 e os 37 artefatos imutáveis da etapa 11 permanecem iguais. Somente estes registros vivos de STATUS/PLANO receberam a entrada atual. A meta de entrega dos três materiais foi atendida; o parecer científico humano continua pendente. Próximo passo: revisão do orientador e incorporação do material ao TCC completo.
+
+### Registro anterior — etapa 11
+
+## Vigência — etapa 11 concluída, 28/10/2026
+
+**Experimento final concluído em 9/9 execuções, com 24 chamadas novas conciliadas.** [Entrega](ETAPA_11_EXPERIMENTO_FINAL.md), [relatório completo](../../outputs/etapa11_final_20261028/RELATORIO.md) e [critério atendido](ETAPA_11_CRITERIO_CONCLUSAO.md).
+
+H acertou 3/3 prazos e 2/2 custos determináveis; preservou a indeterminação monetária real. B/T tiveram uma resposta inválida cada no caso incerto por omitir `justificativa`; os conteúdos brutos eram coerentes, mas não foram reparados ou recuperados nas métricas. H teve 18/18 análises locais válidas. Nenhum preditor, dado ou gabarito foi ajustado durante o experimento.
+
+Compromisso acumulado **US$ 4,567653865**, saldo **US$ 0,432346135**, teto US$ 5. Incremento US$ 0,087228200; 13 reservas desconhecidas históricas preservadas. Provisão não equivale à fatura. Integridade dos 253 artefatos da etapa 10 e chamadas 1–1114 conferida. Três casos sintéticos e uma repetição permitem comparação exploratória entre sistemas completos; não demonstram superioridade estatística ou efeito isolado do grafo. Parecer humano permanece não emitido. A coleta está encerrada; os casos finais agora são expostos.
+
+### Registro anterior — início da etapa 11
+
+## Vigência — etapa 11 em coleta, 28/10/2026
+
+O usuário autorizou os três casos inéditos. Meta ativa conforme [critério](ETAPA_11_CRITERIO_CONCLUSAO.md): executar e auditar nove slots B/H/T, uma repetição, com preditor, inputs, views e referências congelados. O executor exclusivo passou em oito testes offline e foi selado no adendo da etapa 11. Coleta iniciada sem retries, reparo ou fallback. Base de US$ 4,480425665 comprometidos; reserva incremental máxima US$ 0,495; teto acumulado US$ 5.
+
+### Registro anterior — etapa 10
+
+## Vigência — etapa 10, 28/10/2026
+
+**Etapa 10 concluída no escopo técnico; meta da auditoria atendida.** [Entrega](ETAPA_10_AUDITORIA_INDEPENDENTE.md) e [relatório](../../outputs/etapa10_auditoria_20261028/RELATORIO.md). Revisão cega por agentes separados: 15 casos de desenvolvimento, três casos finais inéditos, selos antes do confronto; nenhum valor exato do gabarito alterado. Agregações v6/v7 e custos conferidos. Convenções comuns e lacuna da taxa esclarecidas na versão final v2. Preditor 7.2 preservado; dados, referências, views e protocolo congelados.
+
+Nenhuma chamada paga: **US$ 4,480425665 comprometidos**, saldo **US$ 0,519574335**, 1.114 tentativas e 13 reservas desconhecidas históricas preservadas. Nove slots futuros cabem em reserva máxima de US$ 0,495, sem constituir autorização de coleta. Revisão técnica por agentes não equivale a parecer humano ou independência científica externa; ficha humana não preenchida. **Etapa 11 não iniciada.** O runner histórico de 90 slots não deve ser utilizado no conjunto final; integração do executor com o manifesto de nove slots pertence à próxima etapa.
+
+### Histórico anterior — preservado
+
+Atualizado em 28/10/2026 (America/Sao_Paulo).
+
+## Resumo vigente — 28/10/2026
+
+**Etapa 9 tecnicamente concluída; meta atendida, entrega para revisão.** A v7 revisão 7.2 encerrou 90/90 execuções, com os seis critérios documentados no [aceite técnico](ETAPA_09_ACEITE_TECNICO.md). Etapas 10/11 não iniciadas.
+
+- H: prazo exato 16/30 → **23/30**; custo exato 16/30 → **21/30**. MAE zero apenas nos pares H exatos elegíveis; quatro magnitudes de prazo e seis de custo realmente desconhecidas preservadas. 220/220 análises locais válidas, contra 195/203 na v6.
+- H: mediana 230,47 → 106,94 s; inferência conhecida US$ 0,465194260 → US$ 0,320810515. Comparação de desenvolvimento; contrato, prompt e coordenação mudaram juntos. B/T mantiveram modo JSON e H passou a schema estrito.
+- Restam três execuções H com referências exatas não quantificadas (k_547a/1, /2 e k_f04b/2), além de três direções de custo não recuperadas. A última repetição de k_f04b perdeu cobertura frente à v6. B tem um erro numérico e T uma direção excessiva; 11 rejeições globais preservadas. [Auditoria das causas](../../outputs/etapa9_piloto_v07_r3_20261028/AUDITORIA_RESIDUAL.md).
+- Carteira única: **US$ 4,480425665 comprometidos**, saldo **US$ 0,519574335** sob teto US$ 5. Inclui US$ 0,269021210 das rodadas de desenvolvimento interrompidas e US$ 1,002764765 da coorte completa. Provisões/reservas não equivalem à fatura; 13 reservas desconhecidas históricas permanecem.
+- 23 testes H e seis carteira/integração aprovados na revisão final. 280 chamadas novas conciliadas; sem parada/retry/fallback. Código congelado, chamadas 1–834, tabelas históricas e 1.497 arquivos inventariados conferidos, sem alterações indevidas.
+- [Entrega v7](ETAPA_09_PILOTO_V07.md) e [comparação completa v6/v7](../../outputs/etapa9_piloto_v07_r3_20261028/RELATORIO.md). Referências, suporte semântico e inferibilidade por view aguardam auditoria independente. A conclusão técnica não registra aprovação humana nem autoriza avanço automático.
+
+### Registro anterior da mesma data — revisão 7.2 em coleta
+
+**Meta ativa: concluir tecnicamente a etapa 9. Piloto v7 revisão 7.2 em coleta.** Critério em [ETAPA_09_CRITERIO_CONCLUSAO.md](ETAPA_09_CRITERIO_CONCLUSAO.md); teto acumulado absoluto US$ 5.
+
+- Revisão 7.2 separa fatos locais de deltas calculados pelo motor e explicita a operação de alteração de parâmetros contratuais. Mantém schema restrito por permissão, vínculo técnico, checklist de cláusulas, manutenção escopada e fechamento por dimensão. 23 testes H e seis de carteira/integração aprovados.
+- Coorte de 90 slots pareada à v6, mesmos 15 casos, condições B/H/T, duas repetições, ordem, modelo e parâmetros. Código congelado; sem retries ou fallback. [Notas da revisão](../../outputs/etapa9_piloto_v07_r3_20261028/NOTAS_IMPLEMENTACAO.md).
+- Carteira inicia a revisão em 834 tentativas / US$ 3,477660900 comprometidos; saldo US$ 1,522339100. Inclui US$ 0,269021210 das duas rodadas de desenvolvimento interrompidas, preservadas separadamente. As 13 reservas desconhecidas históricas permanecem.
+- Revisão 7.1 encerrou 15 slots / 44 chamadas conciliadas: schema corrigiu propostas fora de escopo, mas respostas revelaram ambiguidade entre fatos locais e cálculos globais. [Relatório parcial R2](../../outputs/etapa9_piloto_v07_r2_20261028/RELATORIO_PARCIAL.md).
+- Conclusão depende da coleta, comparação, auditoria técnica e integridade final. Etapas 10/11 não iniciadas.
+
+### Registro anterior da mesma data — revisão 7.1
+
+**Meta ativa: concluir tecnicamente a etapa 9. Piloto v7 revisão 7.1 em coleta.** Critério explícito em [ETAPA_09_CRITERIO_CONCLUSAO.md](ETAPA_09_CRITERIO_CONCLUSAO.md), conforme autorização do usuário para corrigir a v7, rodar piloto sob US$ 5 acumulados e continuar até concluir a etapa.
+
+- V7 inicial preservada: seis slots / 17 chamadas, parada técnica após duas propostas externas em nó sem permissões. Todas as chamadas conciliadas, incremento US$ 0,073249855. [Relatório parcial](../../outputs/etapa9_piloto_v07_20261028/RELATORIO_PARCIAL.md).
+- Revisão 7.1 adiciona JSON Schema estrito derivado das permissões, mantendo vínculo técnico, direção, checklist de cláusulas, manutenção escopada e fechamento por dimensão. 20 testes H R2 e seis carteira/integração passaram; envio do schema à contagem e geração conferido. V7 inicial tinha 126 testes aprovados.
+- Nova coorte completa de 90 slots pareada à v6, sem retries/fallback, com código congelado. Carteira única inicia esta revisão em 790 tentativas / US$ 3,281889545; teto absoluto US$ 5. Contabiliza também a rodada interrompida.
+- Comparação e aceitação dependem do término, auditoria técnica dos casos restantes e integridade final. Etapas 10/11 não iniciadas.
+
+## Resumo anterior — 27/10/2026
+
+**Piloto v06 integrado e encerrado em 90/90 execuções, entregue com comparação v05/v06.** Mesmos casos/inputs/modelo/parâmetros, com contrato H v06. Cobertura exata prazo/custo: B 5/30 e 8/30; H 16/30 e 16/30 (v05: 9/30); T 21/30 e 20/30. H teve oito ganhos e uma perda de cobertura, 195/203 análises válidas e oito rejeições de direção/hash. MAE zero apenas nos pares exatos elegíveis; B tem um candidato a falsa precisão e apenas sete pares de custo elegíveis. Comparação descritiva, sem auditoria semântica independente.
+
+- Carteira única: 773 tentativas, **US$ 3,208639690 comprometidos** e **US$ 1,791360310 de saldo** sob teto acumulado de US$ 5. Incremento v06 US$ 1,112032510, com US$ 0,586032510 de inferência conhecida e provisão de contagem. Todas as 263 chamadas novas conciliadas; 13 reservas desconhecidas históricas preservadas. Não equivale à fatura.
+- 55 testes prévios aprovados; 1.208 arquivos inventariados, tabelas históricas e chamadas 1–510 preservados. Sem retry, reparo de respostas, nova parada ou mudança do código congelado. H: mediana 108,95 → 230,47 s; inferência conhecida US$ 0,279920255 → US$ 0,465194260.
+- [Entrega v06 e comparação](ETAPA_09_PILOTO_V06.md). Próxima revisão: rejeições locais, correspondência entre encaminhamentos e resoluções por cláusula, pendências factuais e candidato B/k_d307/1. **Etapas 10/11 não iniciadas.**
+
+## Registros anteriores — preservados para rastreabilidade
+
+
+**H v06: encaminhamentos entre nós implementados e validados offline.** Retomada da etapa 9 solicitada pelo usuário. O contexto explicita o responsável por operação; encaminhamentos externos só são resolvidos por propostas aceitas correspondentes. Faltas factuais e encaminhamentos sem resolução continuam produzindo resultado parcial. Não há conversão automática de pendências textuais v05 nem nova coleta.
+
+- 27 testes novos aprovados também sob Python -O, mais 181 regressões. Demonstração sintética reproduz o bloqueio v05 e exercita resolução, falta factual e ausência de proposta responsável; não mede melhora do modelo real.
+- Pacote aditivo `src/hibrido_v06`, contrato/contexto/manifesto próprios e verificação de reconciliação na normalização. 1.153 arquivos preexistentes inventariados preservados. Carteira continua em 510 tentativas / US$ 2,096607180 comprometidos.
+- [Entrega v06 e limites](ETAPA_09_H_V06_OFFLINE.md). Próximo marco: revisão e integração de uma nova coorte para validar o comportamento real. Etapas 10/11 não iniciadas. Os resumos seguintes preservam as entregas anteriores.
+
+**Piloto v05 encerrado em 90/90 slots, entregue para revisão.** Primeiro B com erro DNS preservado; continuação dos 89 pendentes concluída com rede escalada, sem retry ou nova parada. Cobertura exata prazo/custo: B 4/30 e 8/30; H 9/30 e 9/30; T 23/30 e 21/30. MAE zero somente nos pares exatos elegíveis. H: 176/178 análises válidas, duas rejeições de hash/direção; pendências de permissão/escopo continuam limitando o fechamento. Comparativo v04/v05 apenas descritivo; referências autorais e suporte semântico não auditados.
+
+- Carteira única: 510 tentativas acumuladas; US$ 2,096607180 comprometidos e US$ 2,903392820 de saldo interno sob teto US$ 5. Inferência incremental conhecida US$ 0,399556205; provisão de contagem é hipótese, não fatura. Reservas antigas e tentativa 273 preservadas.
+- 50 testes offline aprovados. Chamadas 1–273, primeiro resultado, dados/códigos/outputs v04 e snapshots anteriores preservados; snapshot final separado da parada DNS.
+- [Entrega v05 e limitações](ETAPA_09_PILOTO_V05.md). Próximo passo: revisão dos resultados e pendências de escopo antes de qualquer nova mudança ou avanço. Etapas 10/11 não iniciadas. Os parágrafos seguintes conservam os estados anteriores da correção offline e do piloto v04.
 
 **H v05: correção offline concluída para revisão, opt-in, sem nova chamada paga.** Foram aprovados 92 testes; 557 arquivos protegidos e ledger preservados. Ausência passa a ter escopo por cláusula; `lacunas` local é nota e fatos ausentes devem estar em propostas tipadas ou pendências operacionais. Omissão do modelo ainda pode causar falsa precisão; sem validação semântica ou ganho real demonstrado. Avaliação v05 isolada com rejeição de versões misturadas. [Entrega e limitações](ETAPA_09_H_V05_OFFLINE.md). Próximo passo: revisão antes de qualquer novo piloto; etapas 10/11 não iniciadas.
 
