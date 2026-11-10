@@ -1,0 +1,60 @@
+'use strict';
+const $=id=>document.getElementById(id),esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let result,selected='SUP_MOTOR',timer=null,step=32;
+const money=v=>v==null?'Indeterminado':(v/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),day=v=>v==null?'Indeterminado':`D${v}`,qty=q=>q?.estado==='exato'?esc(q.valor):'Indeterminado';
+const fmt=q=>JSON.stringify(q,null,2), colors={Supplier:'#bb672c',Component:'#2274a8',Task:'#527b54',Test:'#8a6aae',Milestone:'#ae4e67',Document:'#765ec0',Person:'#87908b',ProjectArea:'#87908b'};
+function sourcesHtml(sources){return sources.map(f=>`<div class="source"><b>${esc(f.documento_id||'Fonte')} · v${esc(f.versao||'1')} · ${esc(f.trecho_id||f.id)} ${esc(f.localizador)}</b><br>${esc(f.texto||f.trecho)}</div>`).join('');}
+function getSources(){const all={};for(const n of result.grafo.nodes)if(n.documento)for(const t of n.documento.trechos)all[t.id]={...t,documento_id:n.documento.id,versao:n.documento.versao,trecho_id:t.id};return all;}
+const scene=new Alfa3D.Graph3D($('graph'),{onSelect:select,onView:view=>{
+  $('graphCount').textContent=`${view.visible}/${view.total} entidades no enquadramento · ${view.edges} relações visíveis · ${view.temporal} temporais`;
+  $('graphZoom').textContent=`${Math.round(view.zoom*100)}%`;
+  $('graphTooltip').hidden=!view.hover;
+  if(view.hover)$('graphTooltip').textContent=`${Alfa3D.types[view.hover.type]||view.hover.type} · ${view.hover.name} · ${view.hover.id}`;
+}});
+let pickerResult=null;
+function graph(){
+  if(!result)return;
+  if(!result.grafo.nodes.some(n=>n.id===selected))selected='SUP_MOTOR';
+  if(pickerResult!==result){
+    $('nodePicker').replaceChildren();
+    for(const type of Object.keys(Alfa3D.types)){
+      const group=document.createElement('optgroup');group.label=Alfa3D.types[type];
+      for(const n of result.grafo.nodes.filter(n=>n.type===type))group.append(new Option(`${n.name} · ${n.id}`,n.id));
+      if(group.children.length)$('nodePicker').append(group);
+    }
+    pickerResult=result;
+  }
+  $('nodePicker').value=selected;
+  $('selectionStatus').textContent=`Selecionado: ${selected}`;
+  scene.update({result,selected,step,documental:$('docEdges').checked,contextual:$('contextEdges').checked,labels:$('showLabels').checked});
+}
+$('nodePicker').onchange=()=>select($('nodePicker').value);
+$('showLabels').onchange=graph;$('contextEdges').onchange=graph;
+$('orbitLeft').onclick=()=>scene.orbit(-.18,0);$('orbitRight').onclick=()=>scene.orbit(.18,0);
+$('orbitUp').onclick=()=>scene.orbit(0,-.18);$('orbitDown').onclick=()=>scene.orbit(0,.18);
+$('zoomIn').onclick=()=>scene.zoom(1.2);$('zoomOut').onclick=()=>scene.zoom(1/1.2);
+$('resetView').onclick=()=>scene.reset();
+const workspace=document.querySelector('.workspace');
+function expandPanel(expand){
+  workspace.classList.toggle('expanded',expand);document.body.classList.toggle('graph-expanded',expand);
+  $('fullscreen').textContent=expand?'⛶ Reduzir painel':'⛶ Ampliar painel';
+  $('fullscreen').setAttribute('aria-pressed',String(expand));scene.invalidate();
+}
+$('fullscreen').onclick=()=>expandPanel(!workspace.classList.contains('expanded'));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&workspace.classList.contains('expanded')){expandPanel(false);$('fullscreen').focus();}});
+function select(id){selected=id;graph();detail();}
+function detail(){const n=result.grafo.nodes.find(n=>n.id===selected);if(!n)return;const all=getSources();$('nodeTitle').textContent=n.name;
+if(n.documento){const d=n.documento;$('detail').innerHTML=`<p><span class="pill">${esc(d.papel)}</span> v${esc(d.versao)} · ${esc(d.formato)}</p><p class="subtle">Fonte fictícia: ${esc(d.autoria)}. Versão anterior: ${esc(d.anterior||'nenhuma')}.</p>${sourcesHtml(d.trechos.map(t=>({...t,documento_id:d.id,versao:d.versao,trecho_id:t.id})))}<h3>Vínculos</h3><pre>${esc(fmt(result.grafo.edges.filter(e=>e.source===n.id||e.target===n.id).map(e=>({relacao:e.type,origem:e.source,destino:e.target,trecho:e.trecho}))))}</pre>`;return;}
+const trace=result.rastro_orquestracao.find(t=>t.no_id===n.id),base=result.baseline_nos[n.id],next=result.estado_projetado_nos[n.id],incoming=result.propagacao.filter(e=>e.destino===n.id),outgoing=result.propagacao.filter(e=>e.origem===n.id);let html=`<p><span class="pill">${esc(n.type)}</span> ${esc(n.id)}</p>`;if(base)html+=`<h3>Estado temporal</h3><p>Base: ${day(base.inicio.valor)} → ${day(base.fim.valor)}<br>Projeção condicional: ${day(next.inicio.valor)} → ${day(next.fim.valor)}<br>Folga total na base: ${result.folgas_base_dias[n.id]} dias</p><p class="subtle">${['Supplier','Component'].includes(n.type)?'Ponto de disponibilidade com duração zero no solver.':''}</p>`;
+html+=`<details open><summary>Parâmetros e fontes</summary><pre>${esc(fmt(n.parametros))}</pre>${sourcesHtml((n.fontes||[]).map(r=>all[r.fonte_id]).filter(Boolean))}</details>`;
+if(trace){html+=`<h3>Análise local</h3><p>${esc(trace.processamento)} · ${esc(trace.analise?.justificativa||trace.motivo)}</p><p class="subtle">${trace.analise?'Interpretação manual simulada; validação pelo contrato H7.2.':''}</p><details><summary>Propostas, evidências e decisões</summary><pre>${esc(fmt({propostas:trace.analise?.propostas,decisoes:result.registro_operacional.decisoes.filter(d=>d.no_id===n.id)}))}</pre></details><details><summary>Fontes efetivamente consultadas</summary>${sourcesHtml(trace.contexto?.fontes||[])}</details>`;}
+html+=`<h3>Efeitos recebidos e transmitidos</h3><pre>${esc(fmt({recebidos:incoming.map(e=>({de:e.origem,estado:e.estado,fim:qty(e.fim_origem)})),transmitidos:outgoing.map(e=>({para:e.destino,estado:e.estado,regra:e.regra}))}))}</pre>`;html+=`<h3>Efeitos financeiros sob custódia</h3><pre>${esc(fmt((result.efeitos_financeiros||[]).filter(e=>e.proprietario===n.id)))}</pre>`;$('detail').innerHTML=html;}
+function render(){const r=result;step=r.rastro_orquestracao.length;$('step').max=step;$('step').value=step;$('finish').textContent=`${day(r.fim_base?.valor)} → ${day(r.fim_novo?.valor)}`;$('deltaDays').textContent=r.delta_dias?.valor==null?'Magnitude indeterminada':`Impacto: ${r.delta_dias.valor>=0?'+':''}${r.delta_dias.valor} dias corridos`;$('cost').textContent=money(r.custo_novo?.valor);$('deltaCost').textContent=`Base ${money(r.custo_base?.valor)} · impacto ${money(r.delta_centavos?.valor)}`;$('coverage').textContent=`${r.consumo.analises} / 32 nós analisados`;$('recsCount').textContent=`${r.verificacao_documental.recomendacoes.length} recomendações · ${r.consumo.chamadas} chamadas pagas`;
+$('origin').innerHTML=`<p><b>${esc(r.documento_origem.nome)}</b> · ${esc(r.documento_origem.id)} · v${esc(r.documento_origem.versao)}</p>${r.documento_origem.trechos.map(t=>`<blockquote>${esc(t.texto)}<br><small>${esc(t.id)} · ${esc(t.localizador)}</small></blockquote>`).join('')}<p class="subtle">Baseline preservada: D40 e R$ 152.000. Parâmetros e avisos sintéticos. Situação da execução: ${esc(r.execucao.estado)}.</p>`;
+$('reviewVersion').textContent=r.verificacao_documental.afirmacoes[0]?.unidade.split(':')[0]||'';$('claims').innerHTML=r.verificacao_documental.afirmacoes.map(a=>`<tr><td>${esc(a.trecho_id)}</td><td>${esc(a.conteudo_atual)}</td><td>${a.calculado?.estado==='exato'?a.afirmacao.unidade==='BRL_centavo'?money(a.calculado.valor):esc(a.calculado.valor):'Indeterminado'}</td><td><span class="pill ${a.estado}">${esc(a.estado.replaceAll('_',' '))}</span></td></tr>`).join('');
+$('recommendations').innerHTML=r.verificacao_documental.recomendacoes.length?r.verificacao_documental.recomendacoes.map(x=>`<article class="recommendation"><h3>${esc(x.documento_id)} v${esc(x.versao_base)} · ${esc(x.localizador)} · ${esc(x.campo)}</h3><p class="before">Atual: ${esc(x.conteudo_atual)}</p><p class="after">Proposta: ${esc(x.alteracao_proposta)}</p><p>${esc(x.justificativa)}</p><span class="pill revisar">Aguardando validação humana · não executada</span><details><summary>Evidências e cálculo (${x.evidencias.length} trechos)</summary>${sourcesHtml(x.evidencias)}<pre>${esc(fmt(x.calculo_ref))}</pre></details></article>`).join(''):'<p class="pill">Nenhuma atualização recomendada. As afirmações verificáveis já correspondem ao estado calculado.</p>';
+$('triage').innerHTML=r.verificacao_documental.triagem_outros_artefatos.map(x=>`<p><b>${esc(x.documento_id)}</b>: ${x.selecionado?'selecionado para triagem':'fora do escopo'} · ${esc(x.estado)}<br>${esc(x.regra)}</p>`).join('');$('costBook').innerHTML=`<table><thead><tr><th>Obrigação única</th><th>Base</th><th>Novo</th><th>Impacto</th></tr></thead><tbody>${(r.livro_parcelas||[]).map(p=>`<tr><td>${esc(p.parcela_id)} ${esc(p.regra_id||'')}</td><td>${money(p.base_centavos)}</td><td>${money(p.novo.valor)}</td><td>${money(p.delta.valor)}</td></tr>`).join('')}</tbody></table><p class="subtle">Cada obrigação aparece uma vez. Extensão geral = max(0, término − 40) × R$ 300. Laboratório = max(0, duração comum dos ensaios − 10) × R$ 500.</p>`;$('routing').textContent=fmt({fechamento:r.registro_operacional.fechamento_final,decisoes:r.registro_operacional.decisoes});updateStep();detail();}
+function updateStep(){step=Number($('step').value);$('stepLabel').textContent=`${step} / ${result.rastro_orquestracao.length}`;const t=result.rastro_orquestracao[step-1];$('stepText').textContent=step===0?'Documento cadastrado → pronto para interpretar os fatos locais.':`${t.no_id}: ${t.processamento}. ${step===result.rastro_orquestracao.length?'Ciclo completo: fechamento, cálculo e verificação documental.':'Reprodução do rastro registrado; os cartões exibem o resultado do ciclo completo.'}`;graph();}
+function stop(){clearInterval(timer);timer=null;$('play').textContent='▶ Reproduzir análise';}
+async function load(){stop();$('run').disabled=true;try{if($('mode').value==='offline'){if(location.protocol==='file:')throw Error('Para executar o Python, inicie o servidor local pelo arquivo ABRIR_DEMONSTRACAO.command. Replay funciona sem servidor.');$('notice').textContent='Executando 32 análises locais simuladas e o motor determinístico…';const response=await fetch('/api/simular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cenario:$('scenario').value})});if(!response.ok)throw Error(await response.text());result=await response.json();$('notice').textContent='SIMULAÇÃO OFFLINE executada agora · interpretações manuais · zero chamadas de IA. Nenhum documento oficial foi alterado.';}else{result=structuredClone(ALFA_DATA.results[$('scenario').value]);$('notice').textContent=`REPRODUÇÃO DE RESULTADO SALVO · origem: simulação offline · ${result.data_execucao}. Não é execução real com IA.`;}render();}catch(e){$('notice').textContent=e.message;}finally{$('run').disabled=false;}}
+$('scenario').innerHTML=ALFA_DATA.scenarios.map(s=>`<option value="${esc(s.id)}">${esc(s.id+' · '+s.titulo)}</option>`).join('');$('scenario').value='D02';$('run').onclick=load;$('scenario').onchange=load;$('mode').onchange=()=>{$('notice').textContent=$('mode').value==='offline'?'Clique em Carregar cenário para executar a simulação Python.':'Clique em Carregar cenário para reproduzir o resultado salvo.';};$('docEdges').onchange=graph;$('step').oninput=()=>{stop();updateStep();};$('prev').onclick=()=>{stop();$('step').value=Math.max(0,step-1);updateStep();};$('next').onclick=()=>{stop();$('step').value=Math.min(result.rastro_orquestracao.length,step+1);updateStep();};$('play').onclick=()=>{if(timer){stop();return;}if(step===result.rastro_orquestracao.length){$('step').value=0;updateStep();}$('play').textContent='Ⅱ Pausar';timer=setInterval(()=>{$('step').value=step+1;updateStep();if(step===result.rastro_orquestracao.length)stop();},650);};$('export').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));a.download=`Alfa-${result.cenario_id}-${result.modo}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};load();

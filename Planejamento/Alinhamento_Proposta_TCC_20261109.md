@@ -2,6 +2,8 @@
 
 Versão de 9 de novembro de 2026 para discussão com o orientador.
 
+> Atualização de escopo em 9 de novembro de 2026: o usuário determinou manter a avaliação e a rastreabilidade documental integradas a prazo e custo. A proposta abaixo de retirar essa dimensão foi superada como recomendação. Consulte `Integracao_documental_prazo_custo_20261109.md` para o inventário, a integração e a avaliação complementar propostas. O texto anterior é preservado como histórico, não como escopo aprovado.
+
 O trabalho desenvolvido sustenta uma avaliação exploratória de uma arquitetura híbrida para analisar impactos de eventos textuais em prazo e custo. Esta revisão delimita a pergunta e os objetivos a esse objeto, preservando a interpretação por LLM, as relações estruturadas, as regras determinísticas e a rastreabilidade como componentes centrais. A alteração de escopo é proposta para apreciação acadêmica; não representa aprovação do orientador.
 
 ## Registro da mudança de escopo
