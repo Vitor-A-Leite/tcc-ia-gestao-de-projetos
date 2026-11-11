@@ -78,3 +78,11 @@ Os testes, limites e resultados são detalhados no [relatório](docs/RELATORIO.m
 A revisão opt-in separa checagem determinística e parecer semântico, preservando o cálculo e o suporte original `nao_auditado`. A CLI `auditar resultado.json --saida auditoria-nova.json` cria auditoria determinística offline sem sobrescrever a coleta. A API aceita revisor injetável; revisão real exige auditoria separada com orçamento persistente e o transporte com reservas existente. O comando `testar` agora executa a suíte inteira.
 
 Veja [uso, contratos, exemplos offline e limites financeiros](docs/REVISAO_OBSERVACIONAL.md). Parecer de IA e resposta prescrita de teste não constituem aprovação humana nem verdade de avaliação.
+
+## Lote de desenvolvimento D01–D09
+
+O executor `src.lote_ia` separa preparo offline e início explicitamente autorizado de D01–D09. Suporta múltiplas entradas, revisão observacional, manifesto congelado e teto acumulado de US$20 com histórico preservado. Veja [protocolo, orçamento e comandos](docs/LOTE_IA_REAL.md).
+
+A coleta de 10/11/2026 foi concluída com intervenções documentadas. Os nove resultados coincidiram com a referência autoral de desenvolvimento. Das 19 tentativas de revisão, 10 produziram pareceres válidos e 9 foram rejeitadas pelo contrato: seis por identificadores divergentes e três por citações não literais. As falhas foram preservadas, sem repetir pareceres para substituí-las. O custo estimado do lote foi US$0,196578, mais US$0,015 de reserva inconciliada; o total histórico comprometido ficou em US$4,812657675.
+
+O [resumo final](outputs/lote_desenvolvimento_revisoes_finais_20261110/resumo_final.json) e o [registro de execução](outputs/lote_desenvolvimento_revisoes_finais_20261110/execucao.json) apontam para os resultados e auditorias. As decisões de continuação estão descritas em [retomada de D04](docs/RETOMADA_D04.md), [inspeção de D09](docs/CONCLUSAO_D09.md) e [revisões restantes](docs/REVISOES_RESTANTES_LOTE.md). Esta coleta não representa execução inteiramente automática nem certificação independente de suporte semântico.

@@ -14,12 +14,24 @@ CONFIG={'reasoning':{'effort':'high'}}
 class TransporteReal:
     origem='openai_real'
     versao_formato_local=VERSAO
-    def __init__(self, pasta, chave, historico_nano, *, http=None):
+    def __init__(self, pasta, chave, historico_nano, *, http=None, ledger=None,
+                 rodada=None, teto_total_nano=5_000_000_000,
+                 teto_rodada_nano=400_000_000, max_chamadas=33,
+                 grupo=None, teto_grupo_nano=None):
+        for valor in (historico_nano, teto_total_nano, teto_rodada_nano, max_chamadas):
+            if type(valor) is not int or valor < 0: raise ValueError('Limite financeiro inválido')
+        if (grupo is None) != (teto_grupo_nano is None): raise ValueError('Grupo exige teto explícito')
+        if grupo is not None and (not isinstance(grupo,str) or not grupo or type(teto_grupo_nano) is not int or teto_grupo_nano < 0):
+            raise ValueError('Grupo financeiro inválido')
+        self.teto_total=teto_total_nano;self.teto_rodada=teto_rodada_nano;self.max_chamadas=max_chamadas
+        self.grupo=grupo;self.teto_grupo=teto_grupo_nano
         self.pasta=Path(pasta);self.pasta.mkdir(parents=True,exist_ok=True)
         self._chave=chave;self.http=http or self._http;self.historico=historico_nano
-        self.db=sqlite3.connect(self.pasta.parent/'consumo_ia_real.sqlite')
+        self.db=sqlite3.connect(Path(ledger) if ledger is not None else self.pasta.parent/'consumo_ia_real.sqlite')
         self.db.execute('CREATE TABLE IF NOT EXISTS chamadas(id TEXT PRIMARY KEY, rodada TEXT, estado TEXT, comprometido INTEGER, entrada INTEGER, saida INTEGER, segundos REAL, arquivo TEXT)')
-        self.db.commit();self.rodada=self.pasta.name;self.parado=False
+        self.db.commit();self.rodada=rodada or self.pasta.name;self.parado=False
+        if grupo is not None and not self.rodada.startswith(grupo+':'):
+            self.db.close();raise ValueError('Rodada fora do grupo financeiro')
     def _http(self,path,payload):
         req=urllib.request.Request('https://api.openai.com/v1/responses'+path,data=json.dumps(payload,ensure_ascii=False).encode(),headers={'Authorization':'Bearer '+self._chave,'Content-Type':'application/json'})
         try:
@@ -39,7 +51,13 @@ class TransporteReal:
         total=self.db.execute('SELECT coalesce(sum(comprometido),0) FROM chamadas').fetchone()[0]
         n=self.db.execute('SELECT count(*) FROM chamadas WHERE rodada=?',(self.rodada,)).fetchone()[0]
         rodada=self.db.execute('SELECT coalesce(sum(comprometido),0) FROM chamadas WHERE rodada=?',(self.rodada,)).fetchone()[0]
-        if n>=33 or total+self.historico+15_000_000>5_000_000_000 or rodada+15_000_000>400_000_000:
+        grupo=0
+        if self.grupo is not None:
+            prefixo=self.grupo+':'
+            grupo=self.db.execute('SELECT coalesce(sum(comprometido),0) FROM chamadas WHERE substr(rodada,1,?)=?',(len(prefixo),prefixo)).fetchone()[0]
+        if (n>=self.max_chamadas or total+self.historico+15_000_000>self.teto_total
+                or rodada+15_000_000>self.teto_rodada
+                or (self.grupo is not None and grupo+15_000_000>self.teto_grupo)):
             self.db.rollback();raise FalhaTransporte('orcamento','Teto acumulado atingido')
         self.db.execute('INSERT INTO chamadas VALUES(?,?,?,?,?,?,?,?)',(cid,self.rodada,'reservada',15_000_000,None,None,0,cid+'.json'));self.db.commit()
         record=dict(id=cid,etiqueta=etiqueta,pedido=payload,precos_usd_milhao={'entrada':.1,'cache':.01,'saida':.5})

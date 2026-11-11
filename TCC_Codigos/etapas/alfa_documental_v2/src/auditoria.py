@@ -142,7 +142,7 @@ def auditar_resultado(resultado, *, revisor=None):
     return registro
 
 
-def auditar_arquivo(origem, destino, *, revisor=None, limites=None):
+def auditar_arquivo(origem, destino, *, revisor=None, limites=None, parar_em_falha=False):
     """Audita arquivo existente e cria outro; repetir o destino nunca gera gasto.
 
     Revisor real é opt-in programático. Não carrega chave, cria transporte ou usa
@@ -167,6 +167,11 @@ def auditar_arquivo(origem, destino, *, revisor=None, limites=None):
         for item in _registros(resultado, revisor, sessao):
             registro['registros'].append(item)
             gravar(destino, registro)
+            if parar_em_falha:
+                exigir(item.get('pacote') is not None, 'Vínculo/proposta inválido na auditoria')
+                if revisor:
+                    exigir((item.get('revisao_semantica') or {}).get('estado') == 'parecer_recebido',
+                           'Revisão falhou; nenhuma proposta seguinte será enviada')
         registro['estado'] = 'concluida'
     except BaseException as exc:
         registro.update(estado='interrompida', erro=str(exc))
