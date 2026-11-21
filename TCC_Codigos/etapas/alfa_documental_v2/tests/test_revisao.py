@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 from .. import ROOT
 from ..src.pipeline import simular
-from ..src.revisao import (VERSAO, Observador, RevisorIA, analisar_propostas,
+from ..src.revisao import (VERSAO, VERSAO_V2, VERSAO_LEGADA, ASPECTOS, Observador, RevisorIA, analisar_propostas,
                           montar_pacote, validar_parecer, formato_parecer, _ref_ids)
+from ..src.evidencias_revisao import ID_ESCOPO, valores_avaliados
 from ..src.auditoria import auditar_resultado, auditar_arquivo, TransporteRevisaoReal
 from ..src.ia_real import TransporteReal, MODELO, CONFIG
 from ..src.apresentacao import registrar_incorporadas
@@ -17,10 +18,35 @@ from ..src.vendor.hibrido_v07_r3.contratos import hash_json
 from ..src.vendor.interpretacao_no.adaptadores import RespostaTransporte, FalhaTransporte
 
 
-def resposta_prescrita(pacote, parecer='sustentada'):
+def resposta_prescrita(pacote, parecer='sustentada', *, versao=VERSAO):
     p = pacote['proposta']
     ids = {r['fonte_id'] for r in _ref_ids(p)}
-    return dict(versao=VERSAO, pacote_hash=pacote['pacote_hash'], proposta_hash=pacote['proposta_hash'],
+    if versao in (VERSAO, VERSAO_V2):
+        aspectos = {nome: dict(estado='sustentado', fonte_ids=sorted(ids),
+                              justificativa='Suporte prescrito para teste do contrato.') for nome in ASPECTOS}
+        if not p['condicoes']:
+            aspectos['condicoes'].update(estado='nao_aplicavel', fonte_ids=[])
+        if parecer != 'sustentada':
+            aspectos['atributo']['estado'] = {'contradita': 'contradito', 'ambigua': 'ambiguo',
+                                              'suporte_insuficiente': 'insuficiente'}[parecer]
+        resposta = dict(versao=versao, pacote_hash=pacote['pacote_hash'], proposta_hash=pacote['proposta_hash'],
+                    contexto_hash=pacote['referencia']['contexto_hash'], parecer=parecer, tipo_efeito='fato_local',
+                    aspectos=aspectos, fontes_examinadas=sorted(ids),
+                    justificativa='Resposta prescrita exclusivamente para testar o contrato.',
+                    suporte_ausente=[] if parecer in ('sustentada', 'contradita') else ['Suporte ausente prescrito.'])
+        if versao == VERSAO:
+            for nome, aspecto in aspectos.items():
+                aspecto['contexto_ids'] = [ID_ESCOPO] if nome == 'escopo' else []
+            resposta.update(contextos_examinados=[ID_ESCOPO], restricoes_escopo=[], fundamentos_valor={})
+            for campo, dado in valores_avaliados(pacote).items():
+                valor = dado['valor']
+                desconhecido = valor is None or isinstance(valor, dict)
+                resposta['fundamentos_valor'][campo] = dict(
+                    conhecimento='indeterminado' if desconhecido else 'exato',
+                    valores=[] if desconhecido else [valor], fonte_ids=sorted(ids),
+                    aplicabilidade='mesmo_objeto_e_vigencia', justificativa='Afirmação prescrita para teste.')
+        return resposta
+    return dict(versao=VERSAO_LEGADA, pacote_hash=pacote['pacote_hash'], proposta_hash=pacote['proposta_hash'],
                 contexto_hash=pacote['referencia']['contexto_hash'], parecer=parecer, tipo_efeito='fato_local',
                 entidade_sustentada=p['no_id'], alvo_sustentado=p['alvo_id'], atributo_sustentado=p['atributo'],
                 unidade_sustentada=p['unidade'], valor_sustentado=deepcopy(pacote['proposto']),
@@ -45,8 +71,9 @@ class TransporteTeste:
         return r if isinstance(r, RespostaTransporte) else RespostaTransporte(json.dumps(r), modelo='teste-offline')
 
 
-def revisor_teste(responder=None):
-    return RevisorIA(TransporteTeste(responder), modelo='teste-offline', configuracao={'fixture': 'contrato'})
+def revisor_teste(responder=None, *, versao=VERSAO):
+    responder = responder or (lambda pacote: resposta_prescrita(pacote, versao=versao))
+    return RevisorIA(TransporteTeste(responder), modelo='teste-offline', configuracao={'fixture': 'contrato'}, versao=versao)
 
 
 def sincronizar(c, a):
@@ -213,7 +240,7 @@ class RevisaoTests(unittest.TestCase):
 
     def test_parecer_estrito_vinculos_fontes_unidade(self):
         p = self.pacote()
-        bom = resposta_prescrita(p)
+        bom = resposta_prescrita(p, versao=VERSAO_LEGADA)
         self.assertEqual(validar_parecer(bom, p), bom)
         for campo, valor in [('interpretacao_validada', True), ('pacote_hash', 'outro'),
                              ('entidade_sustentada', 'OUTRO'), ('alvo_sustentado', 'OUTRO'),
@@ -307,8 +334,7 @@ class RevisaoTests(unittest.TestCase):
         def falso(p):
             r = resposta_prescrita(p, 'suporte_insuficiente')
             if p['proposta']['alvo_id'] == 'release_M_PROTO_READY':
-                r.update(tipo_efeito='propagacao', entidade_sustentada=None, alvo_sustentado=None,
-                         atributo_sustentado=None, unidade_sustentada=None, valor_sustentado=None,
+                r.update(tipo_efeito='propagacao',
                          justificativa='Resposta manual: CHANGE.D02 fala do motor; E026 registra precedência. Não afirma restrição local do marco.',
                          suporte_ausente=['Evidência explícita de nao_antes=25 para M_PROTO_READY.'])
             return r

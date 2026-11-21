@@ -58,13 +58,35 @@ A checagem reutiliza o validador histórico e verifica permissões, entidade/alv
 
 O pacote usa somente o contexto original: entidade/atributo, vigente/proposto, fontes literais com documento/versão/localizador, relações, regras, restrições, parcelas, entradas correntes e operações incorporadas. Não usa resultados finais, referências de avaliação, gabaritos ou a justificativa do proponente como evidência. Hashes provam correspondência local dos dados, não autenticidade externa dos documentos.
 
-O parecer contém `sustentada`, `contradita`, `suporte_insuficiente` ou `ambigua`, tipo de efeito, entidade/alvo/atributo/unidade/valor sustentados, fontes examinadas, citação literal, justificativa e suporte ausente. Há prompt e JSON Schema, seguidos de parser/validador local estritos. Campos extras, JSON com chaves repetidas, fonte inventada, versão divergente, recusa, incompletude, falha de transporte ou incoerência entre campos resultam em `requer_revisao`, sem parecer sustentado. Citações literais válidas ainda não provam que o raciocínio da IA está correto.
+O contrato `2-revisao-observacional` fixa o objeto avaliado no código. A IA avalia sete aspectos da proposta, cobrindo entidade, alvo, atributo, unidade, valor, condições e escopo. Cada aspecto contém estado, IDs de fontes e justificativa. Os estados possíveis são `sustentado`, `contradito`, `insuficiente`, `ambiguo` e `nao_aplicavel`. Este último se aplica exclusivamente a condições vazias.
+
+O parecer global contém `sustentada`, `contradita`, `suporte_insuficiente` ou `ambigua`, tipo de efeito, fontes examinadas, justificativa e suporte ausente. O código verifica a coerência entre a conclusão e os aspectos. Uma conclusão favorável exige suporte em todos os aspectos aplicáveis, referências de evidência e cobertura de todas as fontes citadas pela proposta. Uma conclusão desfavorável exige ao menos um aspecto com o estado correspondente. Valores indeterminados recebem avaliação na representação original.
+
+A resposta da IA seleciona IDs do catálogo de fontes. Após a validação, o código recupera documento, versão, localizador e trecho integral original em `fontes_examinadas`. Os IDs selecionados ficam em `fontes_selecionadas`. Os campos de identidade utilizados pelos consumidores anteriores são derivados do objeto avaliado após um parecer favorável. `resposta_bruta` preserva a resposta recebida e `parecer` contém a representação validada e enriquecida.
+
+Há prompt e JSON Schema versionados, seguidos de parser e validador local estritos. Erros registram código, caminho do campo e mensagem. Entre os diagnósticos estão `fonte_invalida`, `fonte_duplicada`, `fonte_nao_examinada`, `cobertura_incompleta`, `evidencia_ausente`, `aspecto_inconsistente`, `parecer_inconsistente` e `efeito_incompativel`. A identidade registra o hash do prompt e cada revisão registra o hash do schema. A interpretação semântica permanece sujeita a erro mesmo quando o contrato é atendido.
+
+Os registros v1 e v2 podem ser relidos por `validar_parecer`. Para exercitar explicitamente um contrato anterior, use `RevisorIA(..., versao=VERSAO_LEGADA)` ou `RevisorIA(..., versao=VERSAO_V2)`. Cada requisição exige a versão correspondente da resposta. A releitura dos 19 pareceres v1 reproduz os dez aceitos pelo contrato e as nove rejeições originais. Os 23 pareceres da primeira avaliação v2 também são reproduzidos integralmente.
+
+## Contrato v3 e uso dos metadados
+
+O padrão atual é `3-revisao-observacional`. `montar_pacote` inclui `metadados_escopo` e `valores_avaliados`. Para revisar um pacote histórico com o novo contrato, `atualizar_pacote(pacote)` produz um pacote v3 com novo hash, conservando a proposta e a referência ao contexto original.
+
+O cadastro `data/projetos/alfa/escopo_revisao.json` explicita a política de entrada já utilizada pelo normalizador do Alfa. Registra o projeto, a versão, os aliases conhecidos, o vínculo entre cada evento e seu documento/versão e a vigência prospectiva desde D0. A declaração de vigência é procurada por correspondência exata nesse cadastro. O instante de observação tem significado próprio. Uma declaração sem cadastro gera vigência indisponível. Divergências de projeto, versão ou documento são registradas pelo código.
+
+O pacote preserva um snapshot do cadastro, seu hash, os campos de origem e o resultado das verificações. A IA referencia esse registro por `CONTEXTO.ESCOPO`, em `contexto_ids` do aspecto `escopo` e em `contextos_examinados`. A representação validada contém `contextos_resolvidos`. Os demais aspectos usam evidência documental.
+
+Em `restricoes_escopo`, a IA extrai restrições documentais explícitas de projeto, versão e início/fim de vigência. Cada restrição registra o campo, estado de conhecimento, valores, fontes e justificativa. O silêncio documental produz uma lista vazia. O código compara as restrições extraídas ao cadastro e confere o estado declarado em `aspectos.escopo`. Um cadastro verificado com lista vazia resulta em `sustentado`. Uma restrição explícita incompatível resulta em `contradito`. Alternativas e lacunas recebem classificação própria. A interpretação das restrições textuais cabe à IA.
+
+Em `fundamentos_valor`, a IA descreve a afirmação aplicável a cada campo de `valores_avaliados`. Registra `conhecimento`, `valores`, `fonte_ids`, `aplicabilidade` e `justificativa`. O código verifica referências e cardinalidade e realiza a comparação. Uma fonte indeterminada e uma proposta exata resultam em `insuficiente`. Fonte e proposta indeterminadas sustentam o estado de conhecimento. Valores exatos divergentes, referentes ao mesmo objeto e vigência, resultam em `contradito`. Uma afirmação de outro período ou objeto resulta em suporte insuficiente para essa comparação.
+
+O parser exige coerência entre os fundamentos, os aspectos e o parecer global. As comparações ficam em `comparacoes_codigo`. Erros específicos incluem `classificacao_valor_inconsistente`, `classificacao_escopo_inconsistente` e `fundamento_inconsistente`. A conferência é condicionada à extração semântica feita pela IA. A classificação de falsos positivos e falsos negativos exige avaliação dos documentos e dessas extrações.
 
 A auditoria documental apenas reapresenta os estados da verificação de afirmações previamente cadastradas, inclusive `ja_atualizado` e `nao_verificavel`. Não extrai novas afirmações de prosa nem reescreve documentos.
 
 ## Revisão real: API explícita e orçamento independente
 
-Este caminho foi exercitado somente com HTTP falso nos testes. Nenhuma chamada paga foi executada nesta implementação. A compatibilidade do schema com o serviço real ainda exige um ensaio futuro autorizado.
+O lote de desenvolvimento de 10/11/2026 exercitou o contrato v1 no serviço real e produziu 19 tentativas de revisão. Os registros estão em `outputs/lote_desenvolvimento_revisoes_finais_20261110`. A avaliação do contrato v2 usa o executor de comparação descrito adiante.
 
 O chamador fornece um `TransporteReal` já configurado com a carteira histórica correta. O módulo não procura chaves, cria credenciais ou reconstrói o histórico monetário:
 
@@ -91,6 +113,8 @@ Repetir o mesmo destino é recusado antes de qualquer gasto. Um novo destino con
 
 ## Testes
 
+As regressões v2 exercitam os 19 pacotes históricos, a recuperação literal das fontes, o vínculo do objeto avaliado, os sete aspectos, a coerência das conclusões, as entradas indeterminadas de D04/D09 e o documento já atualizado de D07. A avaliação em lote tem testes de retomada, interrupção em voo, reservas financeiras, manifesto obsoleto e classificação dos controles.
+
 ```bash
 python3 -B TCC_Codigos/etapas/alfa_documental_v2 testar
 # ou, da raiz do repositório:
@@ -98,3 +122,31 @@ python3 -m unittest discover -s TCC_Codigos/etapas/alfa_documental_v2/tests -t .
 ```
 
 A CLI `testar` descobre a suíte inteira. Os testes cobrem estrutura, valores desconhecidos, igualdade, repetição, conflito, custo/unidade, parser/fontes/vínculos, pareceres prescritos, falhas, orçamento/reservas, repetição de destino e observação sem alteração dos resultados/contextos do proponente. Os testes de HTTP usam transporte falso em diretório temporário; os dados e gastos históricos não são alterados.
+
+## Comparação versionada do revisor v2
+
+O executor `scripts/avaliar_revisor_v2.py` reconstrói os pacotes a partir das 19 propostas coletadas e inclui quatro controles. N01 reapresenta a proposta histórica de `release_M_PROTO_READY=25`. N02 contrapõe uma proposta D26 a um aviso D25. N03 propõe D25 diante de disponibilidade desconhecida. N04 oferece duas datas alternativas sem confirmação. Os três últimos controles são variantes sintéticas identificadas nos registros.
+
+O preparo grava entradas, referências de avaliação e manifesto com hashes do código, configuração, fontes e resultados de origem. As referências autorais e os pareceres anteriores ficam em arquivo próprio. A chamada recebe o pacote documental. A comparação lê as referências após persistir os resultados de todos os casos.
+
+```bash
+python3 -B -m TCC_Codigos.etapas.alfa_documental_v2.scripts.avaliar_revisor_v2 preparar /tmp/avaliacao-nova
+python3 -B -m TCC_Codigos.etapas.alfa_documental_v2.scripts.avaliar_revisor_v2 executar /tmp/avaliacao-nova \
+  --autorizacao 'Registrar aqui a autorização efetivamente recebida'
+```
+
+O lote usa uma sessão persistente por caso, reserva máxima de US$0,015 por tentativa e teto conjunto de US$0,345 para os 23 casos. A carteira histórica participa do teto acumulado de US$20. O bloqueio de arquivo serializa a execução do mesmo manifesto. Ao retomar o comando, os checkpoints existentes são reapresentados e os casos pendentes seguem para avaliação. Uma tentativa interrompida fica identificada no relatório, com sua reserva financeira registrada.
+
+`comparacao.json` apresenta validade contratual, classificações, concordância com pareceres anteriores válidos, concordância dos controles com a referência autoral, cobertura declarada de fontes/aspectos e consumo. A cobertura conta referências selecionadas. A qualidade da interpretação é examinada pelos controles e pela inspeção dos pareceres. Os quatro controles constituem uma amostra de desenvolvimento.
+
+## Avaliação das correções v3
+
+O executor `scripts/avaliar_revisor_v3.py` prepara 28 casos. São 19 propostas históricas, os quatro controles anteriores e cinco controles adicionais para projeto divergente, versão divergente, início de vigência divergente, aliases cadastrados e data anterior com nova magnitude desconhecida. Os identificadores operacionais dos controles utilizam apenas seus números. As referências autorais ficam no arquivo de comparação.
+
+```bash
+python3 -B -m TCC_Codigos.etapas.alfa_documental_v2.scripts.avaliar_revisor_v3 preparar /tmp/avaliacao-v3-nova
+python3 -B -m TCC_Codigos.etapas.alfa_documental_v2.scripts.avaliar_revisor_v3 executar /tmp/avaliacao-v3-nova \
+  --autorizacao 'Registrar aqui a autorização efetivamente recebida'
+```
+
+A reserva máxima da rodada é US$0,42. O executor reutiliza a carteira e os mecanismos de checkpoint da avaliação anterior. O manifesto congela o cadastro, o código, as entradas e os hashes dos resultados históricos. A comparação apresenta também os quatro casos de regressão de escopo. A suíte exercita leitura histórica, valores desconhecidos, aliases, vigência, documentos divergentes, campos monetários compostos, retomada e orçamento.
