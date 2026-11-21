@@ -38,6 +38,85 @@ def publico(s):
             'solicitacoes_previstas':len(s['regiao']['nos'])+s['consumo']['solicitacoes_simuladas'] if s['estado']=='pronta' else len(s['pendentes'])+s['consumo']['solicitacoes_simuladas']}
 
 
+ROTULOS_CONDICAO = {
+    'ia': 'Documentos em prosa · afirmações extraídas pela IA (rodada real v2, 21/11/2026)',
+    'referencia': 'Documentos em prosa · afirmações de referência (antes da extração por IA)',
+    'cadastro': 'Status Report estruturado · afirmações cadastradas manualmente',
+}
+RODADA_IA = ROOT/'outputs/extracao_ia_v2_20261121'
+
+
+def extracoes_ia(documentos, pasta=RODADA_IA):
+    """Leituras gravadas da rodada real; não chama a IA. Documento sem leitura válida volta com o erro."""
+    validas, falhas = [], {}
+    for d in documentos:
+        caso = pasta/'casos'/f"{d['id']}_{d['versao']}.json"
+        if not caso.exists():
+            falhas[(d['id'], d['versao'])] = [dict(codigo='sem_extracao', mensagem='Documento não lido na rodada registrada')]
+            continue
+        reg = json.loads(caso.read_text())
+        x = reg.get('extracao') or {}
+        if reg.get('estado') == 'concluido' and x.get('extracao'):
+            validas.append(x['extracao'])
+        else:
+            falhas[(d['id'], d['versao'])] = [dict(codigo=e['codigo'], mensagem=e['mensagem']) for e in x.get('erros', [])] or [dict(codigo='interrompida', mensagem='Extração sem resposta registrada')]
+    manifesto = json.loads((pasta/'manifesto.json').read_text())
+    return validas, falhas, dict(rodada=manifesto['id'], modelo=manifesto['modelo'], versao_contrato=manifesto['versao'])
+
+
+def conteudo(s, condicao='referencia'):
+    """Revisão do conteúdo sobre o resultado da sessão; nada é escrito nos documentos."""
+    from . import conteudo as C
+    if condicao not in ROTULOS_CONDICAO: raise ValueError('Condição desconhecida')
+    r = s.get('resultado') or {}
+    if not r.get('execucao'): raise ValueError('Execute a análise antes de revisar o conteúdo.')
+    cen = ler_cenario(s['cenario_id']); _, base = carregar()
+    if condicao == 'cadastro':
+        ext = C.afirmacoes_cadastro(cen)
+        v = cen['registro_vigente']
+        textos = [dict(id=v['id'], versao=v['versao'], nome=v['nome'], artefato='status_report',
+                       trechos=[dict(id=t['id'], localizador=t['localizador'], texto=t['texto']) for t in v['trechos']])]
+    elif condicao == 'ia':
+        todos = C.documentos_do_cenario(cen)
+        ext, falhas, origem_ia = extracoes_ia(todos)
+        lidos = {(e['documento_id'], e['versao']) for e in ext}
+        textos = [d for d in todos if (d['id'], d['versao']) in lidos]
+    else:
+        ext = C.extracoes_referencia(cen)
+        textos = C.documentos_do_cenario(cen)
+    rev = C.revisar_documentos(r, cen, ext, condicao=condicao, documentos=base)
+    fontes = {t['id']: dict(documento_id=d['id'], versao=d['versao'], texto=t['texto']) for d in base for t in d['trechos']}
+    fontes.update({t['id']: dict(documento_id=cen['documento']['id'], versao=cen['documento']['versao'], texto=t['texto']) for t in cen['documento']['trechos']})
+    nomes = {n['id']: n['name'] for n in carregar()[0]['nodes']}
+    docs = []
+    for d, rd in zip(textos, rev['documentos']):
+        docs.append(dict(documento_id=d['id'], versao=d['versao'], nome=d.get('nome'), artefato=d.get('artefato'),
+            trechos=[dict(id=t['id'], localizador=t['localizador'], texto=t['texto']) for t in d['trechos']],
+            nao_mapeados=rd['nao_mapeados'], resumo=rd['resumo'],
+            afirmacoes=[dict(id=x['afirmacao']['id'], trecho_id=x['afirmacao']['trecho_id'], citacao=x['afirmacao']['citacao'],
+                             predicado=x['afirmacao']['predicado'], entidades=x['afirmacao']['entidades'],
+                             nomes=[nomes.get(e, e) for e in x['afirmacao']['entidades']],
+                             estado=x['estado'], motivo=x['motivo'], sugestao=x['sugestao'],
+                             por_que=x['explicacao']['texto'], caminhos=x['explicacao']['caminhos'],
+                             absorcoes=x['explicacao']['absorcoes'], efeitos_custo=x['explicacao']['efeitos_custo'],
+                             evidencias=[dict(**e, **fontes.get(e['fonte_id'], {})) for e in x['explicacao']['evidencias']])
+                        for x in rd['afirmacoes']]))
+    extra = {}
+    if condicao == 'ia':
+        for d in todos:
+            if (d['id'], d['versao']) in falhas:
+                docs.append(dict(documento_id=d['id'], versao=d['versao'], nome=d.get('nome'), artefato=d.get('artefato'),
+                                 trechos=[dict(id=t['id'], localizador=t['localizador'], texto=t['texto']) for t in d['trechos']],
+                                 nao_mapeados=[], resumo={}, afirmacoes=[], erro_extracao=falhas[(d['id'], d['versao'])]))
+        extra['origem_ia'] = origem_ia
+    total = {}
+    for d in docs:
+        for k, v in d['resumo'].items(): total[k] = total.get(k, 0)+v
+    return dict(condicao=condicao, rotulo=ROTULOS_CONDICAO[condicao], cenario_id=s['cenario_id'], revisao_sessao=s.get('revisao'),
+                execucao_global=rev['execucao_global'], documentos=docs, resumo=total, **extra,
+                atualizacao_executada=False, natureza=rev['natureza'], suporte_semantico=rev['suporte_semantico'])
+
+
 class SugestaoManual:
     origem='simulado'
     def __init__(self,ids):self.ids=ids
@@ -62,6 +141,8 @@ def handler(gerente):
                         casos.append(dict(id=c['id'],relato=ev['relato'],mencoes=ev['entidades_mencionadas'],total_nos=len(grafo_documental(g,d,c)['nodes'])))
                     return self.resposta(dict(catalogo=catalogo(g),arestas=[x for x in g['edges'] if x['classe']=='temporal'],casos=casos,versao=e['versao']))
                 if url.path=='/api/sessao':return self.resposta(publico(gerente.ler(parse_qs(url.query)['id'][0])))
+                if url.path=='/api/conteudo':
+                    q=parse_qs(url.query);return self.resposta(conteudo(gerente.ler(q['id'][0]),q.get('condicao',['referencia'])[0]))
                 if url.path=='/api/projeto':return self.resposta(projeto(parse_qs(url.query)['cenario'][0]))
                 paths={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/graph3d.js':'graph3d.js'}
                 if url.path not in paths:return self.resposta({'erro':'Recurso não encontrado'},404)

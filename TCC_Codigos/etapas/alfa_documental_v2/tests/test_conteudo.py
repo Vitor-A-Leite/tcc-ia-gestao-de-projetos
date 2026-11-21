@@ -145,6 +145,44 @@ class AvaliacaoTest(unittest.TestCase):
             self.assertEqual(r['chamadas_ia'], 0)
 
 
+class InterfaceTest(unittest.TestCase):
+    def test_endpoint_parcial_concluida_e_antes_da_execucao(self):
+        from TCC_Codigos.etapas.alfa_documental_v2.src.sessoes import Sessoes
+        from TCC_Codigos.etapas.alfa_documental_v2.src.demo import conteudo
+        with tempfile.TemporaryDirectory() as d:
+            m = Sessoes(d)
+            s = m.preparar('D02', ['SUP_MOTOR'], '1')
+            with self.assertRaises(ValueError):
+                conteudo(m.ler(s['id']))
+            s = m.executar(s['id'])
+            parcial = conteudo(m.ler(s['id']))
+            st = {a['id']: a['estado'] for a in parcial['documentos'][0]['afirmacoes']}
+            self.assertEqual(st['SRP.RESUMO#2'], 'nao_verificavel')
+            s = m.executar(s['id'], selecionados=s['pendentes'], max_nos='todos')
+            final = conteudo(m.ler(s['id']))
+            self.assertEqual(final['resumo'], {'revisar': 7, 'ja_atualizado': 3, 'julgamento_humano': 2, 'preservar': 1})
+            self.assertFalse(final['atualizacao_executada'])
+            doc = final['documentos'][0]
+            self.assertTrue(all(a['citacao'] in next(t['texto'] for t in doc['trechos'] if t['id'] == a['trecho_id']) for a in doc['afirmacoes']))
+            ia = conteudo(m.ler(s['id']), 'ia')
+            self.assertEqual(ia['origem_ia']['versao_contrato'], '2-extracao-afirmacoes')
+            st = {a['citacao']: a['estado'] for a in ia['documentos'][0]['afirmacoes']}
+            self.assertEqual(st['o projeto segue dentro do cronograma'], 'revisar')
+            self.assertEqual(st['essa entrega não está no caminho crítico'], 'revisar')
+            cad = conteudo(m.ler(s['id']), 'cadastro')
+            self.assertEqual(cad['resumo'], {'revisar': 3, 'ja_atualizado': 2})
+            with self.assertRaises(ValueError):
+                conteudo(m.ler(s['id']), 'gabarito')
+
+
+    def test_rodada_ia_com_documento_invalido_mostra_erro(self):
+        from TCC_Codigos.etapas.alfa_documental_v2.src.demo import extracoes_ia, RODADA_IA
+        docs = C.documentos_do_cenario(ler_cenario('D02'))
+        validas, falhas, _ = extracoes_ia(docs, RODADA_IA.parent/'extracao_ia_20261121')
+        self.assertEqual({(e['documento_id'], e['versao']) for e in validas}, {('ACTION', '1-prosa'), ('DECISION', '1-prosa')})
+        self.assertEqual(falhas[('STATUS', '1-prosa')][0]['codigo'], 'campo_invalido')
+
+
 class ExtracaoTest(unittest.TestCase):
     def setUp(self):
         self.cat = X.catalogo_entidades()
@@ -205,8 +243,11 @@ class ExtracaoTest(unittest.TestCase):
         self.assertEqual(r['estado'], 'requer_revisao')
         r = self.extrator(lambda _doc: {}, estado='recusa').extrair(documento('RISK'))
         self.assertEqual(r['erros'][0]['codigo'], 'resposta_incompleta')
-        with self.assertRaises(X.ErroExtracao) as e:
+        # Modo real recusa transporte que não passa pelas reservas do ledger.
+        with self.assertRaises(Exception):
             X.ExtratorIA(Prescrito(lambda d: {}), modelo='m', configuracao={}, modo='ia_real')
+        with self.assertRaises(X.ErroExtracao) as e:
+            X.ExtratorIA(Prescrito(lambda d: {}), modelo='m', configuracao={}, modo='outro')
         self.assertEqual(e.exception.codigo, 'modo_indisponivel')
 
     def test_metricas_contam_erros_de_extracao(self):

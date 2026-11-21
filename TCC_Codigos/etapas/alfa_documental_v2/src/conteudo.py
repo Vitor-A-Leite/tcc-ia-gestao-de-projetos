@@ -51,6 +51,18 @@ def documentos_do_cenario(cenario, corpus=None):
     return [documento_prosa(corpus, *c.split('@', 1)) for c in chaves]
 
 
+def extracoes_referencia(cenario):
+    """Condição C: afirmações de referência dos documentos em prosa do cenário.
+
+    Ficam em `avaliacao/` porque também são o gabarito da extração por IA; nunca
+    entram no pedido do extrator.
+    """
+    from . import ROOT
+    ref = json.loads((ROOT/'avaliacao/referencias/conteudo/afirmacoes_referencia.json').read_text())
+    idx = {(e['documento_id'], e['versao']): e for e in ref['extracoes']}
+    return [idx[(d['id'], d['versao'])] for d in documentos_do_cenario(cenario)]
+
+
 def afirmacoes_cadastro(cenario):
     """Condição A: as afirmações estruturadas à mão no registro vigente, no formato comum."""
     s = cenario['registro_vigente']
@@ -251,7 +263,7 @@ def explicar(result, cenario, alvos, *, custo=False, contendo=None):
             linha += f" (mais {len(g)-1} ramo(s) paralelo(s)" + (f" via {', '.join(via)})" if via else ')')
         linhas.append(linha+'.')
     for ef in efs:
-        delta = 'indeterminado' if ef['conhecimento'] != 'exato' else f"{ef['delta']:+d} centavos"
+        delta = 'indeterminado' if ef['conhecimento'] != 'exato' else ('+' if ef['delta'] >= 0 else '−')+_brl(abs(ef['delta']))
         linhas.append(f"Parcela {ef['parcela_id']} ({ef['proprietario']}): {delta}.")
     if not unicos and abs_:
         linhas.append('Mudança absorvida antes de chegar ao alvo: ' +
@@ -412,6 +424,11 @@ def avaliar_afirmacao(a, result, cenario, documentos):
                 explicacao=expl, sugestao=_sugestao(a, estado, motivo, calc))
 
 
+def _brl(centavos):
+    s = f'{centavos/100:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+    return f'R$ {s}'
+
+
 def _sugestao(a, estado, motivo, calc):
     if estado == 'ja_atualizado':
         return None
@@ -425,7 +442,11 @@ def _sugestao(a, estado, motivo, calc):
     if motivo == 'afirmacao_conflitante':
         return 'O documento traz valores incompatíveis para a mesma informação; unificar após conferir a fonte.'
     if motivo == 'valor_divergente' and isinstance(calc, dict) and calc.get('estado') == 'exato':
-        return f"{a['entidades'][0]}.{a['campo']}: {calc['valor']} {a['unidade'] or ''}".strip()+'.'
+        if a['unidade'] == 'BRL_centavo':
+            return f"Atualizar {a['entidades'][0]}.{a['campo']} para {_brl(calc['valor'])}."
+        if a['unidade'] == 'dia_corrido':
+            return f"Atualizar {a['entidades'][0]}.{a['campo']} para o dia {calc['valor']}."
+        return f"Atualizar {a['entidades'][0]}.{a['campo']} para {calc['valor']}."
     if motivo == 'magnitude_sem_suporte':
         return 'Substituir o valor exato por "a confirmar" até obter a informação faltante.'
     if motivo == 'certeza_sem_suporte':
@@ -437,7 +458,7 @@ def _sugestao(a, estado, motivo, calc):
     if p == 'no_prazo' and (calc.get('fim') or {}).get('estado') == 'exato':
         detalhe = f"fim calculado no dia {calc['fim']['valor']}, planejado no dia {calc['fim_planejado']}"
     elif p == 'dentro_orcamento' and (calc.get('custo') or {}).get('estado') == 'exato':
-        detalhe = f"custo calculado {calc['custo']['valor']} centavos, orçamento {calc['orcamento']} centavos"
+        detalhe = f"custo calculado {_brl(calc['custo']['valor'])}, orçamento {_brl(calc['orcamento'])}"
     elif p == 'critico':
         detalhe = 'a entidade passou a determinar o prazo final' if calc.get('critico') else 'a entidade deixou de determinar o prazo final'
     elif p == 'sem_alteracao' and calc.get('mudadas'):

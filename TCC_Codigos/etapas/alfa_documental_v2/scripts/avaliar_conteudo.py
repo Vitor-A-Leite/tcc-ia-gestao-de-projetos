@@ -23,10 +23,7 @@ def ler(p):
     return json.loads(Path(p).read_text())
 
 
-def extracoes_referencia(cenario):
-    ref = ler(REFERENCIAS/'afirmacoes_referencia.json')
-    idx = {(e['documento_id'], e['versao']): e for e in ref['extracoes']}
-    return [idx[(d['id'], d['versao'])] for d in C.documentos_do_cenario(cenario)]
+extracoes_referencia = C.extracoes_referencia
 
 
 def revisar(cid, condicao, resultado=None):

@@ -1,6 +1,6 @@
 # Plano de revisão do conteúdo documental
 
-Data: 20/11/2026. Escopo: Alfa documental v2. Situação em 21/11/2026: **F0 a F4 implementadas offline; F5 (rodada real) e F6 (interface) pendentes**. Ver "Estado da implementação" ao final.
+Data: 20/11/2026. Escopo: Alfa documental v2. Situação em 21/11/2026: **F0 a F6 implementadas; F5 executada com IA real em duas rodadas de desenvolvimento**. Ver "Estado da implementação" ao final.
 
 ## Pergunta
 
@@ -229,8 +229,8 @@ F1 a F3 não usam IA e já entregam valor: o "por quê" e as regras dos outros a
 | F2 | Caminho determinante, ramos paralelos resumidos, absorções por folga e efeitos de custo; evidências restritas ao caminho | `src/conteudo.py::explicar` |
 | F3 | Regras de Action Log (`julgamento_humano` se a entidade vinculada mudou), Risk Register (idem, na dimensão do risco) e Decision Log (`preservar`) | `src/conteudo.py::_avaliar_artefato` |
 | F4 | Prompt, JSON Schema estrito, catálogo de entidades, validador com diagnósticos (`citacao_nao_literal`, `predicado_incompativel`, `conhecimento_inconsistente`, `cobertura_incompleta`, `registro_ausente`…), executor offline e métricas de extração | `src/extracao.py` |
-| F5 | **Não executada.** `ExtratorIA(modo='ia_real')` recusa com `modo_indisponivel`; falta ligar à sessão com orçamento e obter autorização | — |
-| F6 | **Não feita.** Saída disponível pela CLI | `__main__.py conteudo` |
+| F5 | **Executada em 21/11/2026 (duas rodadas, US$0,0154).** v1: 2/6 válidas, por ambiguidades do contrato. v2: 6/6 válidas; condição B com 117/117 estados equivalentes. Ver `docs/AVALIACAO_EXTRACAO_IA.md`. Infraestrutura: `ExtratorIA(modo='ia_real')` passa por `SessaoAuditoriaReal` e `TransporteExtracaoReal` (reservas do ledger, teto acumulado de US$20). Executor `preparar`/`executar` com manifesto congelado, uma tentativa por documento (6), checkpoint e autorização textual; compara extração e condição B depois das respostas | `scripts/avaliar_extracao.py`, `tests/test_avaliar_extracao.py` |
+| F6 | Painel "5 · O que revisar nos documentos e por quê" na interface: documentos com frases destacadas por estado, cartões com motivo, sugestão, caminho clicável no grafo e evidências; troca entre leitura da IA (padrão; reutiliza a rodada real v2, sem novas chamadas), prosa de referência e cadastro manual. Documento sem leitura válida aparece com o erro do contrato. Endpoint `GET /api/conteudo?id=…&condicao=…` sobre o resultado da sessão; análise parcial gera "não verificável" | `web/`, `src/demo.py::conteudo` |
 
 Uso, da raiz do repositório:
 

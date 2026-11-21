@@ -166,6 +166,7 @@ function renderSession(s) {
   }
   for (const id of ['play','prev','next','step']) $(id).disabled = !trace().length || busy || s.estado === 'executando';
   metrics(); renderReview(); continuation(); choices(); selectionSummary(); detail(); updateStep(); updateButtons();
+  if (s.estado !== 'executando') loadContent();
   if (s.erro_interface) error(s.erro_interface);
 }
 async function setCase(restore = null) {
@@ -188,7 +189,7 @@ async function setCase(restore = null) {
     $('preview').textContent = 'Inspecione um nó para incluí-lo nas entradas ou use a lista de seleção.'; $('contagem').textContent = '';
     loading = false;
     if (restore) { renderSession(restore); if (restore.estado === 'executando') { busy = true; pollSession(restore.revisao-1); } }
-    else { choices(); graph(); detail(); selectionSummary(); metrics(); renderReview(); continuation(); updateStep(); updateButtons(); }
+    else { choices(); graph(); detail(); selectionSummary(); metrics(); renderReview(); continuation(); updateStep(); updateButtons(); loadContent(); }
   } catch (e) { loading = false; error(e); updateButtons(); }
 }
 async function prepare() {
@@ -218,6 +219,79 @@ async function run(continuar) {
   try { await api('/api/executar', body); pollSession(body.revisao); }
   catch(e) { busy = false; error(e); updateButtons(); }
 }
+// ---- 5 · Revisão do conteúdo dos documentos
+const contentStates = {revisar:'Revisar',julgamento_humano:'Decisão humana',nao_verificavel:'Não verificável',preservar:'Preservar',ja_atualizado:'Correto'};
+const contentSeverity = ['revisar','julgamento_humano','nao_verificavel','preservar','ja_atualizado'];
+const contentReasons = {valor_divergente:'O valor escrito difere do calculado.',premissa_alterada:'A situação descrita deixou de valer.',magnitude_sem_suporte:'Afirma um valor exato que a informação atual não sustenta.',certeza_sem_suporte:'Afirma uma certeza sobre algo ainda indeterminado.',referencia_obsoleta:'Cita uma versão que não é mais a vigente.',afirmacao_conflitante:'O mesmo trecho traz valores diferentes para a mesma informação.',confirmado:'Compatível com o resultado calculado.',execucao_incompleta:'A análise ficou incompleta; não se afirma desatualização.',sem_estado_calculado:'Não há estado calculado para conferir.',evento_relacionado:'O registro está ligado a algo que mudou; uma pessoa deve decidir.',registro_historico:'Registro histórico: a mudança não autoriza reescrevê-lo.'};
+const contentArtifacts = {status_report:'Status Report',action_log:'Action Log',risk_register:'Risk Register',decision_log:'Decision Log'};
+let contentData = null, contentKey = null, contentLoading = false;
+function contentHighlight(text, claims) {
+  const spans = [];
+  for (const c of claims) { const i = text.indexOf(c.citacao); if (i >= 0) spans.push({a:i,b:i+c.citacao.length,c}); }
+  const cuts = [...new Set([0,text.length,...spans.flatMap(s => [s.a,s.b])])].sort((x,y) => x-y);
+  let html = '';
+  for (let k = 0; k < cuts.length-1; k++) {
+    const a = cuts[k], b = cuts[k+1], piece = esc(text.slice(a,b)), on = spans.filter(s => s.a <= a && s.b >= b).map(s => s.c);
+    if (!on.length) { html += piece; continue; }
+    const top = contentSeverity.find(st => on.some(c => c.estado === st));
+    html += `<mark class="st-${top}" data-claims="${esc(on.map(c => c.id).join(' '))}" title="${esc(on.map(c => contentStates[c.estado]).join(' · '))}">${piece}</mark>`;
+  }
+  return html;
+}
+function contentChain(c) {
+  return (c.caminhos || []).slice(0,2).map(p => `<div class="chain">${p.nos.map((n,i) => `${i ? '<span class="arrow">→</span>' : ''}<span class="hop${n.fim_base !== n.fim_novo ? ' changed' : ''}" data-node="${esc(n.no)}" title="${esc(name(n.no))}">${esc(n.no)}${i === 0 || i === p.nos.length-1 ? ` <small>${day(n.fim_base)}→${n.conhecimento === 'exato' ? day(n.fim_novo) : '?'}</small>` : ''}</span>`).join('')}</div>`).join('') + ((c.caminhos || []).length > 2 ? `<p class="hint">Mais ${c.caminhos.length-2} caminho(s) paralelo(s) no texto abaixo.</p>` : '');
+}
+function contentCard(c) {
+  const why = c.estado === 'ja_atualizado' && !c.absorcoes?.length ? '' : c.por_que;
+  return `<article class="ccard st-${esc(c.estado)}" id="claim-${esc(c.id)}"><div><span class="st st-${esc(c.estado)}">${esc(contentStates[c.estado] || c.estado)}</span> <small class="subtle">${esc(c.id)} · ${esc(c.predicado)}</small></div>
+<p class="quote">“${esc(c.citacao)}”</p><p class="why"><b>${esc(contentReasons[c.motivo] || c.motivo)}</b></p>
+${c.sugestao ? `<p class="sug">${esc(c.sugestao)}</p>` : ''}${contentChain(c)}${why ? `<details><summary>Por quê, em texto</summary><p class="why">${esc(why)}</p></details>` : ''}
+${c.evidencias?.length && c.estado !== 'ja_atualizado' ? `<details><summary>Evidências (${c.evidencias.length})</summary>${sourcesHtml(c.evidencias.map(e => ({...e,trecho_id:e.fonte_id,texto:e.texto || '(relação do grafo)'})))}</details>` : ''}
+<p class="ents">Entidades: ${esc(c.nomes.join(', '))}</p><div class="actions">${c.entidades.filter(e => project.grafo.nodes.some(n => n.id === e)).slice(0,3).map(e => `<button class="secondary" data-node="${esc(e)}">Ver ${esc(e)} no grafo</button>`).join('')}</div></article>`;
+}
+function renderContent() {
+  const box = $('contentDocs'), only = $('contentOnlyAttention').checked;
+  if (!contentData) return;
+  const d = contentData, t = d.resumo, n = k => t[k] || 0;
+  $('contentSummary').innerHTML = contentSeverity.map(k => `<div class="count"><b class="st-text">${n(k)}</b><span class="st st-${k}">${contentStates[k]}</span></div>`).join('');
+  $('contentStatus').textContent = `${d.cenario_id} · execução ${d.execucao_global || '—'} · ${d.rotulo}`;
+  box.innerHTML = d.documentos.map(doc => {
+    const byTrecho = {}; for (const c of doc.afirmacoes) (byTrecho[c.trecho_id] ||= []).push(c);
+    const unmapped = new Set(doc.nao_mapeados.map(x => x.trecho_id));
+    const cards = doc.afirmacoes.filter(c => !only || c.estado !== 'ja_atualizado');
+    if (doc.erro_extracao) return `<section class="cdoc"><header><h3>${esc(contentArtifacts[doc.artefato] || doc.artefato)} · ${esc(doc.nome || doc.documento_id)}</h3><span class="st st-nao_verificavel">Sem leitura válida da IA</span></header><div class="ctext">${doc.trechos.map(tr => `<p><span class="loc">${esc(tr.localizador)}</span>${esc(tr.texto)}</p>`).join('')}</div><p class="subtle">A resposta da IA foi recusada pelo contrato e não foi repetida: ${esc(doc.erro_extracao.map(e => e.codigo + ' — ' + e.mensagem).join('; '))}</p></section>`;
+    return `<section class="cdoc"><header><h3>${esc(contentArtifacts[doc.artefato] || doc.artefato)} · ${esc(doc.nome || doc.documento_id)}</h3><span>${contentSeverity.filter(k => doc.resumo[k]).map(k => `<span class="st st-${k}">${doc.resumo[k]} ${contentStates[k]}</span>`).join(' ')}</span></header>
+<div class="ctext">${doc.trechos.map(tr => `<p class="${unmapped.has(tr.id) ? 'unmapped' : ''}"><span class="loc">${esc(tr.localizador)}</span>${contentHighlight(tr.texto, byTrecho[tr.id] || [])}${unmapped.has(tr.id) ? ' <small>(sem afirmação verificável)</small>' : ''}</p>`).join('')}</div>
+<div class="ccards">${cards.map(contentCard).join('') || '<p class="empty">Nada a revisar neste documento.</p>'}</div></section>`;
+  }).join('');
+  const notes = {
+    ia: `Afirmações lidas pela IA (${d.origem_ia?.modelo || 'modelo'}, contrato ${d.origem_ia?.versao_contrato || '—'}) na rodada real registrada; a tela reutiliza essas leituras e não faz novas chamadas. A comparação com o cálculo é feita pelo código.`,
+    referencia: 'Afirmações de referência redigidas para o desenvolvimento; servem de gabarito para a leitura da IA.',
+    cadastro: 'Afirmações cadastradas manualmente no Status Report.'};
+  $('contentNote').textContent = 'Recomendações aguardam validação humana; nenhum documento foi alterado. ' + notes[d.condicao];
+}
+async function loadContent() {
+  const done = session && result?.execucao;
+  if (!done) { contentData = null; contentKey = null; $('contentSummary').innerHTML = ''; $('contentStatus').textContent = ''; $('contentDocs').innerHTML = '<p class="empty">Execute a análise para revisar o conteúdo dos documentos.</p>'; return; }
+  const key = `${session.id}:${session.revisao}:${$('contentCondition').value}`;
+  if (key === contentKey || contentLoading) return;
+  contentLoading = true; $('contentStatus').textContent = 'Conferindo documentos…';
+  try { contentData = await api(`/api/conteudo?id=${encodeURIComponent(session.id)}&condicao=${$('contentCondition').value}`); contentKey = key; renderContent(); }
+  catch (e) { $('contentDocs').innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
+  finally { contentLoading = false; }
+}
+$('contentCondition').onchange = () => { contentKey = null; loadContent(); };
+$('contentOnlyAttention').onchange = renderContent;
+$('contentDocs').addEventListener('click', e => {
+  const node = e.target.closest('[data-node]');
+  if (node) { selectNode(node.dataset.node); document.querySelector('.workspace').scrollIntoView({behavior:'smooth'}); return; }
+  const mark = e.target.closest('mark[data-claims]');
+  if (mark) {
+    if ($('contentOnlyAttention').checked) { $('contentOnlyAttention').checked = false; renderContent(); }
+    const card = $('claim-'+mark.dataset.claims.split(' ')[0]);
+    if (card) { card.scrollIntoView({behavior:'smooth',block:'center'}); card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1400); }
+  }
+});
 function expandPanel(expand) {
   document.querySelector('.workspace').classList.toggle('expanded',expand); document.body.classList.toggle('graph-expanded',expand);
   $('fullscreen').textContent = expand ? '⛶ Reduzir painel' : '⛶ Ampliar painel'; $('fullscreen').setAttribute('aria-pressed',String(expand)); scene.invalidate();
