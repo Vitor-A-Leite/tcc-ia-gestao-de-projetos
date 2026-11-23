@@ -38,9 +38,9 @@ def referencia(doc_id, versao):
 
 def resposta_de(ext):
     campos = ('trecho_id', 'citacao', 'predicado', 'entidades', 'campo', 'valor', 'unidade',
-              'conhecimento', 'referencia_temporal', 'registro', 'justificativa')
+              'conhecimento', 'limites', 'referencia_temporal', 'registro', 'justificativa')
     return dict(versao=X.VERSAO, documento_id=ext['documento_id'], versao_documento=ext['versao'],
-                afirmacoes=[{k: deepcopy(a[k]) for k in campos} for a in ext['afirmacoes']],
+                afirmacoes=[{k: deepcopy(a.get(k)) for k in campos} for a in ext['afirmacoes']],
                 nao_mapeados=deepcopy(ext['nao_mapeados']))
 
 
@@ -143,6 +143,67 @@ class AvaliacaoTest(unittest.TestCase):
             self.assertTrue(all(x['reproduz_verificacao_atual'] for x in r['linha_base_A'].values()))
             self.assertEqual(r['condicao_C']['divergencias'], [])
             self.assertEqual(r['chamadas_ia'], 0)
+
+
+def afirmacao(trecho='T.X', predicado='valor', entidades=('SUP_MOTOR',), campo='fim', valor=18, unidade='dia_corrido',
+              conhecimento='exato', limites=None, n=1):
+    return dict(id=f'{trecho}#{n}', documento_id='DOC', versao='1', trecho_id=trecho, citacao='x', predicado=predicado,
+                entidades=list(entidades), campo=campo, valor=valor, unidade=unidade, conhecimento=conhecimento,
+                limites=limites, referencia_temporal='absoluta', registro=None, justificativa='teste')
+
+
+def avaliar(cid, a):
+    r = C.revisar_documentos(resultado(cid), ler_cenario(cid), [dict(documento_id='DOC', versao='1', afirmacoes=[a], nao_mapeados=[])], condicao='teste')
+    x = r['documentos'][0]['afirmacoes'][0]
+    return x['estado'], x['motivo'], x['calculado']
+
+
+class PredicadosV3Test(unittest.TestCase):
+    """Folga, duração, custo por parcela e faixas, exercitados só em D01–D09."""
+
+    def test_folga_projetada(self):
+        a = afirmacao(campo='folga', valor=2)
+        self.assertEqual(avaliar('D08', a)[:2], ('ja_atualizado', 'confirmado'))
+        self.assertEqual(avaliar('D01', a)[2]['valor'], 1)  # D19: folga cai para 1
+        self.assertEqual(avaliar('D02', a)[:2], ('revisar', 'valor_divergente'))  # D25: crítico, folga 0
+        self.assertEqual(avaliar('D02', a)[2]['valor'], 0)
+        self.assertEqual(avaliar('D04', a)[:2], ('revisar', 'magnitude_sem_suporte'))
+
+    def test_duracao(self):
+        self.assertEqual(avaliar('D06', afirmacao(entidades=['TEST_LOAD'], campo='duracao', valor=4))[:2], ('revisar', 'valor_divergente'))
+        self.assertEqual(avaliar('D02', afirmacao(entidades=['TEST_LIFE'], campo='duracao', valor=10))[:2], ('ja_atualizado', 'confirmado'))
+
+    def test_custo_por_parcela_e_sem_alteracao(self):
+        p10 = afirmacao(entidades=['p_10'], campo='custo', valor=3000000, unidade='BRL_centavo')
+        self.assertEqual(avaliar('D03', p10)[:2], ('revisar', 'valor_divergente'))
+        self.assertEqual(avaliar('D08', p10)[:2], ('ja_atualizado', 'confirmado'))
+        lab = afirmacao(predicado='sem_alteracao', entidades=['p_17'], campo='custo', valor=None, unidade=None)
+        self.assertEqual(avaliar('D06', lab)[:2], ('revisar', 'premissa_alterada'))
+        self.assertEqual(avaliar('D02', lab)[:2], ('ja_atualizado', 'confirmado'))
+
+    def test_faixa_de_semana(self):
+        a = afirmacao(entidades=['M_RELEASE'], valor=None, conhecimento='faixa', limites=dict(minimo=38, maximo=41))
+        self.assertEqual(avaliar('D08', a)[:2], ('ja_atualizado', 'confirmado'))
+        self.assertEqual(avaliar('D02', a)[:2], ('revisar', 'valor_divergente'))
+        self.assertEqual(avaliar('D04', a)[:2], ('revisar', 'magnitude_sem_suporte'))
+
+    def test_contrato_v3(self):
+        cat = X.catalogo_entidades()
+        doc = dict(id='DOC', versao='1', trechos=[dict(id='T.X', texto='entrega na terceira semana; parcela R$ 30.000')])
+        base = dict(trecho_id='T.X', citacao='entrega na terceira semana', predicado='valor', entidades=['SUP_MOTOR'], campo='fim',
+                    valor=None, unidade='dia_corrido', conhecimento='faixa', limites=dict(minimo=14, maximo=20),
+                    referencia_temporal='relativa', registro=None, justificativa='j')
+        resp = lambda a: dict(versao=X.VERSAO, documento_id='DOC', versao_documento='1', afirmacoes=[a], nao_mapeados=[])
+        self.assertEqual(X.validar_extracao(resp(base), doc, cat)['afirmacoes'][0]['limites'], dict(minimo=14, maximo=20))
+        casos = [(dict(limites=None), 'conhecimento_inconsistente'),
+                 (dict(limites=dict(minimo=20, maximo=14)), 'conhecimento_inconsistente'),
+                 (dict(conhecimento='exato', valor=18), 'conhecimento_inconsistente'),
+                 (dict(entidades=['p_10'], campo='fim'), 'campo_invalido')]
+        for mud, codigo in casos:
+            with self.assertRaises(X.ErroExtracao) as e:
+                X.validar_extracao(resp({**base, **mud}), doc, cat)
+            self.assertEqual(e.exception.codigo, codigo, mud)
+        self.assertIn('p_10', {e['id'] for e in cat})
 
 
 class InterfaceTest(unittest.TestCase):

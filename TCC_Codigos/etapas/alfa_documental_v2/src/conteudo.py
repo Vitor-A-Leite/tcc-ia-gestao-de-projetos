@@ -86,12 +86,66 @@ def _nos(result):
     return {n['no_id']: n for n in result.get('resultados_nos', [])}
 
 
+def _quantidade(valor, estado='exato'):
+    return dict(estado=estado if valor is not None else 'indeterminado', valor=valor)
+
+
+def folgas_projetadas(result):
+    """Folga total no cronograma projetado: fim mais tarde − fim cedo, recuando do marco final.
+
+    Usa as datas projetadas e as relações temporais da propagação. Nó cuja folga
+    depende de data indeterminada recebe None.
+    """
+    proj = result.get('estado_projetado_nos', {})
+    suc = {}
+    for e in _arestas(result):
+        suc.setdefault(e['origem'], []).append(e['destino'])
+    fim = {n: (d.get('fim') or {}).get('valor') for n, d in proj.items()}
+    ini = {n: (d.get('inicio') or {}).get('valor') for n, d in proj.items()}
+    tarde = {}
+    pendentes = set(proj)
+    while pendentes:
+        progresso = False
+        for n in list(pendentes):
+            filhos = suc.get(n, [])
+            if any(f in pendentes for f in filhos):
+                continue
+            if not filhos:
+                tarde[n] = fim[n]
+            else:
+                inicios_tarde = []
+                for f in filhos:
+                    dur = None if tarde.get(f) is None or fim[f] is None or ini[f] is None else fim[f]-ini[f]
+                    inicios_tarde.append(None if dur is None else tarde[f]-dur)
+                tarde[n] = None if any(x is None for x in inicios_tarde) else min(inicios_tarde)
+            pendentes.discard(n); progresso = True
+        if not progresso:
+            break
+    return {n: (None if tarde.get(n) is None or fim[n] is None else tarde[n]-fim[n]) for n in proj}
+
+
+def _parcela(result, pid):
+    return next((p for p in result.get('livro_parcelas', []) if p['parcela_id'] == pid), None)
+
+
 def _calculado(result, entidade, campo):
     """Mesma leitura de `documentos.verificar`, para que a condição A reproduza o estado atual."""
     if campo == 'custo' and entidade == 'PROJECT':
         return deepcopy(result.get('custo_novo'))
+    if campo == 'custo' and _parcela(result, entidade):
+        return deepcopy(_parcela(result, entidade)['novo'])
     if entidade == 'M_RELEASE' and campo == 'fim':
         return deepcopy(result.get('fim_novo'))
+    if campo == 'folga':
+        if entidade not in result.get('estado_projetado_nos', {}):
+            return None
+        return _quantidade(folgas_projetadas(result).get(entidade))
+    if campo == 'duracao':
+        n = _nos(result).get(entidade)
+        if n is None or n.get('processamento') in ('bloqueado', 'nao_avaliado'):
+            return None
+        i, f = (n.get('inicio') or {}).get('valor'), (n.get('fim') or {}).get('valor')
+        return _quantidade(None if i is None or f is None else f-i)
     n = _nos(result).get(entidade, {})
     q = deepcopy(n.get(campo, n.get('quantitativo', {}).get(campo)))
     if n.get('processamento') in ('bloqueado', 'nao_avaliado'):
@@ -307,12 +361,16 @@ def _avaliar_valor(a, result):
     q = _calculado(result, e, campo)
     if q is None:
         return 'nao_verificavel', 'sem_estado_calculado', None
+    faixa = a.get('conhecimento') == 'faixa' and a.get('limites')
     if q['estado'] == 'exato':
+        if faixa:
+            dentro = a['limites']['minimo'] <= q['valor'] <= a['limites']['maximo']
+            return ('ja_atualizado', 'confirmado', q) if dentro else ('revisar', 'valor_divergente', q)
         igual = a['conhecimento'] == 'exato' and q['valor'] == a['valor']
         return ('ja_atualizado', 'confirmado', q) if igual else ('revisar', 'valor_divergente', q)
     if _pendente(result):
         return 'nao_verificavel', 'execucao_incompleta', q
-    if a['valor'] is None:
+    if a['valor'] is None and not faixa:
         return 'ja_atualizado', 'confirmado', q
     return 'revisar', 'magnitude_sem_suporte', q
 
@@ -326,6 +384,18 @@ def _avaliar_sem_alteracao(a, result):
                 sem_estado.append(e); continue
             if e in result.get('nos_com_mudanca_prazo', []):
                 (mudadas if p.get('estado') == 'exato' else incertas).append(e)
+        elif _parcela(result, e):
+            delta = _parcela(result, e)['delta']
+            if delta.get('estado') != 'exato':
+                incertas.append(e)
+            elif delta['valor'] != 0:
+                mudadas.append(e)
+        elif e == 'PROJECT':
+            q = result.get('custo_novo') or {}
+            if q.get('estado') != 'exato':
+                incertas.append(e)
+            elif q['valor'] != result['custo_base'].get('valor'):
+                mudadas.append(e)
         else:
             efs = [x for x in result.get('efeitos_financeiros', []) if x['proprietario'] == e]
             if any(x['delta'].get('estado') != 'exato' for x in efs):

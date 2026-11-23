@@ -16,12 +16,14 @@ def interpretador(fixture, grafo):
         proposals=[]
         for ch in fixture['mudancas']:
             if ch['no']!=c['no_id']: continue
-            if ch['campo']=='cost' and len(owners[ch['no']])!=1:
+            if ch['campo']=='cost' and 'parcela' in ch and ch['parcela'] not in owners[ch['no']]:
+                raise ValueError('Parcela não pertence ao nó indicado')
+            if ch['campo']=='cost' and 'parcela' not in ch and len(owners[ch['no']])!=1:
                 raise ValueError('Parcela ambígua: fixture exige identificação explícita antes de simular')
             op,alvo,at,unit={
                 'release':('substituir_restricao','release_'+ch['no'],'valor','dia_corrido'),
                 'duration':('substituir_duracao',ch['no'],'duracao','dia_corrido'),
-                'cost':('substituir_parcela',next(iter(owners.get(ch['no'],[])),None),'valor_centavos','BRL_centavo')}[ch['campo']]
+                'cost':('substituir_parcela',ch.get('parcela') or next(iter(owners.get(ch['no'],[])),None),'valor_centavos','BRL_centavo')}[ch['campo']]
             val=conhecimento(ch['valor'],[ref]);val.pop('direcao')
             proposals.append(dict(operacao=op,alvo_id=alvo,atributo=at,unidade=unit,valor=val,evidencias=[ref],relacao_refs=[],regra_refs=[],condicoes=[],origem_ref=ref))
         rules=[]

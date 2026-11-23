@@ -207,8 +207,13 @@ class Sistema(unittest.TestCase):
         self.assertEqual(self.m.ler(s['id'])['estado'],'pronta')
     def test_sessao_id_sem_path_traversal(self):
         with self.assertRaises(ValueError):self.m.ler('../qualquer')
-    def test_casos_finais_ausentes(self):
-        self.assertFalse((DATA/'cenarios/final').exists());self.assertFalse((ROOT/'avaliacao/referencias/final').exists())
+    def test_casos_finais_sem_respostas(self):
+        # A partição final existe desde a preparação da avaliação final (23/11/2026); os cenários
+        # trazem só o comunicado e a mudança estruturada, nunca rótulos esperados.
+        for p in (DATA/'cenarios/final').glob('*.json'):
+            c=json.loads(p.read_text());self.assertEqual(c['particao'],'final')
+            self.assertFalse({'revisar','nao_revisar','gabarito','esperado'}&set(c))
+        self.assertFalse((ROOT/'avaliacao/referencias/final').exists())
     def test_autonomia_fora_repositorio(self):
         with tempfile.TemporaryDirectory() as tmp:
             shutil.copytree(ROOT,Path(tmp)/'alfa_documental_v2',ignore=shutil.ignore_patterns('outputs','__pycache__'))
