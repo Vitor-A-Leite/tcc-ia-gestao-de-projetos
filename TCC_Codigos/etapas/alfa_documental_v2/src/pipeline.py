@@ -15,7 +15,7 @@ from .vendor.orquestracao import _corrente
 
 
 def ler_cenario(id, particao='dev'):
-    if particao not in ('dev','final') or not id.isalnum(): raise ValueError('Cenário inválido')
+    if particao not in ('dev','final','final2') or not id.isalnum(): raise ValueError('Cenário inválido')
     return json.loads((DATA/'cenarios'/particao/(id+'.json')).read_text())
 
 

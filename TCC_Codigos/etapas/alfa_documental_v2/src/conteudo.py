@@ -8,13 +8,14 @@ e não converte informação indeterminada em zero ou em desatualização.
 """
 from copy import deepcopy
 import json
+import re
 
 from . import DATA
 from .vendor.interpretacao_no.contratos import hash_json
 
 VERSAO = '1-revisao-conteudo'
 PREDICADOS = ('valor', 'sem_alteracao', 'no_prazo', 'dentro_orcamento', 'critico',
-              'versao', 'compromisso', 'risco', 'decisao')
+              'versao', 'compromisso', 'risco', 'decisao', 'intervalo')
 PREDICADOS_COMPARAVEIS = ('valor', 'no_prazo', 'dentro_orcamento', 'critico', 'versao')
 ESTADOS = ('revisar', 'ja_atualizado', 'nao_verificavel', 'julgamento_humano', 'preservar')
 MOTIVOS = ('valor_divergente', 'premissa_alterada', 'magnitude_sem_suporte', 'certeza_sem_suporte',
@@ -434,6 +435,33 @@ def _avaliar_artefato(a, result):
     return 'ja_atualizado', 'confirmado', dict(entidades_alteradas=[])
 
 
+def _versao_normal(v):
+    """'revisão 1', 'rev. 1' e '1' designam a mesma versão; sem dígitos, compara o texto."""
+    digitos = re.findall(r'\d+', str(v))
+    return '.'.join(digitos) if digitos else str(v).strip().casefold()
+
+
+def _avaliar_intervalo(a, result):
+    """Dias entre o fim da primeira entidade e o início da segunda (B − A).
+
+    valor booleano: true = existe intervalo (> 0), false = não existe; valor inteiro: dias exatos.
+    """
+    ea, eb = a['entidades']
+    qa, qb = _calculado(result, ea, 'fim'), _calculado(result, eb, 'inicio')
+    if qa is None or qb is None:
+        return 'nao_verificavel', 'sem_estado_calculado', None
+    if qa.get('estado') != 'exato' or qb.get('estado') != 'exato':
+        if _pendente(result):
+            return 'nao_verificavel', 'execucao_incompleta', None
+        return 'revisar', 'certeza_sem_suporte' if type(a['valor']) is bool else 'magnitude_sem_suporte', None
+    dias = qb['valor']-qa['valor']
+    calc = dict(estado='exato', valor=dias, fim_a=qa['valor'], inicio_b=qb['valor'])
+    if type(a['valor']) is bool:
+        estado, motivo = _veredito_booleano(a['valor'], dias > 0, result)
+        return estado, motivo, calc
+    return (('ja_atualizado', 'confirmado') if dias == a['valor'] else ('revisar', 'valor_divergente')) + (calc,)
+
+
 def _versao_vigente(documentos, entidade):
     for d in documentos:
         if d['id'] == entidade:
@@ -452,7 +480,7 @@ def avaliar_afirmacao(a, result, cenario, documentos):
         if vigente is None:
             estado, motivo = 'nao_verificavel', 'sem_estado_calculado'
         else:
-            estado, motivo = ('ja_atualizado', 'confirmado') if str(a['valor']) == str(vigente) else ('revisar', 'referencia_obsoleta')
+            estado, motivo = ('ja_atualizado', 'confirmado') if _versao_normal(a['valor']) == _versao_normal(vigente) else ('revisar', 'referencia_obsoleta')
         expl = explicar(result, cenario, [])
     elif p == 'no_prazo':
         e = a['entidades'][0]
@@ -470,6 +498,9 @@ def avaliar_afirmacao(a, result, cenario, documentos):
     elif p == 'sem_alteracao':
         estado, motivo, calc = _avaliar_sem_alteracao(a, result)
         expl = explicar(result, cenario, calc['mudadas']+calc['incertas'], custo=a['campo'] == 'custo')
+    elif p == 'intervalo':
+        estado, motivo, calc = _avaliar_intervalo(a, result)
+        expl = explicar(result, cenario, a['entidades'])
     elif p == 'critico':
         estado, motivo, calc = _avaliar_critico(a, result)
         e = a['entidades'][0]

@@ -1,6 +1,6 @@
 # Avaliação final: protocolo congelado
 
-Data: 23/11/2026. Situação: **preparada, aguardando autorização para a rodada com IA real**.
+Data: 23/11/2026. Situação: **executada em 23/11/2026 (tentativa 2; a tentativa 1 foi interrompida por corte de conexão da VPN). Resultados em `docs/AVALIACAO_FINAL_RESULTADOS.md`.**
 
 ## Pergunta
 

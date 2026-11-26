@@ -206,6 +206,87 @@ class PredicadosV3Test(unittest.TestCase):
         self.assertIn('p_10', {e['id'] for e in cat})
 
 
+class RobustezTest(unittest.TestCase):
+    """Validação parcial, voto, normalização de versão, intervalo e condição E (dados de desenvolvimento)."""
+
+    def setUp(self):
+        self.cat = X.catalogo_entidades()
+        self.doc = documento('STATUS')
+
+    def test_casar_citacao_tolera_maiusculas_e_espacos(self):
+        texto = 'Resumo: o projeto segue  dentro do cronograma, com lançamento'
+        self.assertEqual(X.casar_citacao('O projeto segue dentro do cronograma', texto), 'o projeto segue  dentro do cronograma')
+        self.assertIsNone(X.casar_citacao('o projeto está atrasado', texto))
+
+    def test_validacao_parcial_descarta_so_o_que_e_invalido(self):
+        base = resposta_de(referencia('STATUS', '1-prosa'))
+        base['afirmacoes'][0]['citacao'] = 'O Projeto Segue Dentro Do Cronograma'   # só maiúsculas
+        base['afirmacoes'][1]['citacao'] = 'texto inventado'                        # inválida
+        base['nao_mapeados'].append(dict(base['nao_mapeados'][0]))                  # duplicado
+        with self.assertRaises(X.ErroExtracao):
+            X.validar_extracao(deepcopy(base), self.doc, self.cat)
+        r = X.validar_extracao(base, self.doc, self.cat, modo='parcial')
+        self.assertEqual(len(r['afirmacoes']), 9)
+        self.assertEqual(r['afirmacoes'][0]['citacao'], 'o projeto segue dentro do cronograma')
+        self.assertEqual([d['codigo'] for d in r['descartadas']], ['citacao_nao_literal'])
+        self.assertIn('nao_mapeado_duplicado_fundido', [d['codigo'] for d in r['diagnosticos']])
+        sem = resposta_de(referencia('STATUS', '1-prosa')); sem['nao_mapeados'] = []
+        r = X.validar_extracao(sem, self.doc, self.cat, modo='parcial')
+        self.assertEqual(r['nao_mapeados'], [dict(trecho_id='SRP.CONTEXTO', razao='sem_decisao')])
+
+    def test_voto_entre_leituras(self):
+        ref = referencia('STATUS', '1-prosa')
+        a = deepcopy(ref); b = deepcopy(ref); c = deepcopy(ref)
+        b['afirmacoes'][1]['valor'] = 41; c['afirmacoes'] = c['afirmacoes'][1:]
+        r = X.combinar_extracoes([a, b, c], self.doc)
+        por = {(x['trecho_id'], x['predicado'], x['campo'], tuple(x['entidades'])): x for x in r['afirmacoes']}
+        self.assertEqual(por[('SRP.RESUMO', 'valor', 'fim', ('M_RELEASE',))]['valor'], 40)  # 2 de 3
+        self.assertEqual(len(r['afirmacoes']), 10)  # no_prazo está em 2 de 3: mantido
+        self.assertEqual(X.combinar_extracoes([a, c], self.doc, minimo=2)['afirmacoes'][0]['predicado'], 'valor')
+
+    def test_versao_normalizada(self):
+        a = afirmacao(predicado='versao', entidades=['DOC_CAD'], campo='versao', valor='revisão 1', unidade='versao')
+        self.assertEqual(avaliar('D08', a)[:2], ('ja_atualizado', 'confirmado'))
+        self.assertEqual(avaliar('D08', dict(a, valor='revisão 2'))[:2], ('revisar', 'referencia_obsoleta'))
+
+    def test_intervalo(self):
+        espera = afirmacao(predicado='intervalo', entidades=['T_PROC', 'T_ASSEMBLY'], campo=None, valor=True, unidade=None)
+        self.assertEqual(avaliar('D02', espera)[:2], ('ja_atualizado', 'confirmado'))   # montagem em D25, compras em D20
+        self.assertEqual(avaliar('D08', espera)[:2], ('revisar', 'premissa_alterada'))   # sem espera
+        dias = afirmacao(predicado='intervalo', entidades=['SUP_MOTOR', 'SUP_GEAR'], campo=None, valor=2)
+        self.assertEqual(avaliar('D08', dias)[:2], ('ja_atualizado', 'confirmado'))
+        self.assertEqual(avaliar('D02', dias)[2]['valor'], -5)
+        self.assertEqual(avaliar('D04', dias)[:2], ('revisar', 'magnitude_sem_suporte'))
+        doc = dict(id='DOC', versao='1', trechos=[dict(id='T.X', texto='há espera entre compras e montagem')])
+        resp = lambda **m: dict(versao=X.VERSAO, documento_id='DOC', versao_documento='1', nao_mapeados=[], afirmacoes=[dict(
+            trecho_id='T.X', citacao='há espera entre compras e montagem', predicado='intervalo', entidades=['T_PROC', 'T_ASSEMBLY'],
+            campo=None, valor=True, unidade=None, conhecimento='exato', limites=None, referencia_temporal='nao_aplicavel',
+            registro=None, justificativa='j', **m)])
+        X.validar_extracao(resp(), doc, self.cat)
+        r = resp(); r['afirmacoes'][0]['entidades'] = ['T_PROC']
+        with self.assertRaises(X.ErroExtracao):
+            X.validar_extracao(r, doc, self.cat)
+
+    def test_condicao_e(self):
+        from TCC_Codigos.etapas.alfa_documental_v2.src import avaliacao_final as AF
+        docs = [dict(id='S', versao='1', artefato='status_report', trechos=[
+            dict(id='S.A', texto='Fim em D40 e equipe animada.'), dict(id='S.B', texto='Montagem com folga de 2 dias.'),
+            dict(id='S.C', texto='Bruno usa o intervalo antes da montagem.')])]
+        rev = dict(documentos=[dict(documento_id='S', versao='1', afirmacoes=[
+            dict(afirmacao=dict(trecho_id='S.A', citacao='Fim em D40'), estado='revisar', motivo='valor_divergente'),
+            dict(afirmacao=dict(trecho_id='S.B', citacao='folga de 2 dias'), estado='ja_atualizado', motivo='confirmado')])])
+        d = {'S.A': dict(rotulo='CORRETO', informacoes=[]),
+             'S.B': dict(rotulo='REVISAR', informacoes=[dict(citacao='folga de 2 dias', motivo='valor_divergente')]),
+             'S.C': dict(rotulo='REVISAR', informacoes=[dict(citacao='intervalo antes da montagem', motivo='premissa_alterada')])}
+        r, m = AF.agregar_e(rev, d, docs)
+        self.assertEqual(r, {'S.A': 'REVISAR', 'S.B': 'CORRETO', 'S.C': 'REVISAR'})   # código prevalece em S.B
+        self.assertEqual(m['S.C'], {'premissa_alterada'})
+        r, _ = AF.agregar_e(None, d, docs)
+        self.assertEqual(r['S.B'], 'REVISAR')                                           # sem B, vale D
+        r, _ = AF.agregar_e(rev, None, docs)
+        self.assertEqual(r['S.C'], 'SEM_AFIRMACAO')
+
+
 class InterfaceTest(unittest.TestCase):
     def test_endpoint_parcial_concluida_e_antes_da_execucao(self):
         from TCC_Codigos.etapas.alfa_documental_v2.src.sessoes import Sessoes

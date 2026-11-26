@@ -37,7 +37,7 @@ def ler(p):
 
 def origens():
     caminhos = [AF.MATERIAL, AF.GABARITO, DATA/'grafo.json', DATA/'documentos.json']
-    caminhos += sorted((DATA/'cenarios/final').glob('*.json')) + sorted((DATA/'simulacoes/final').glob('*.json'))
+    caminhos += sorted((DATA/'cenarios'/AF.PARTICAO).glob('*.json')) + sorted((DATA/'simulacoes'/AF.PARTICAO).glob('*.json'))
     return {str(p.relative_to(ROOT)): lote.sha(p) for p in caminhos}
 
 
@@ -51,7 +51,8 @@ def tarefas():
     return t
 
 
-def preparar(destino, repeticoes=REPETICOES):
+def preparar(destino, repeticoes=REPETICOES, modo_validacao='parcial', rodada='final'):
+    AF.configurar(rodada)
     destino = Path(destino)
     ts = tarefas()
     chamadas = len(ts)*repeticoes
@@ -66,11 +67,11 @@ def preparar(destino, repeticoes=REPETICOES):
         entradas.append(dict(id=t['id'], condicao=t['condicao'], arquivo=str(arq.relative_to(destino)), sha256=lote.sha(arq)))
     catalogo = X.catalogo_entidades()
     gab, _ = AF.carregar_gabarito()
-    m = dict(id='final-'+uuid.uuid4().hex, preparado_em=lote.agora(), modelo=MODELO, configuracao=CONFIG,
+    m = dict(id=rodada+'-'+uuid.uuid4().hex, rodada=rodada, preparado_em=lote.agora(), modelo=MODELO, configuracao=CONFIG,
         repeticoes=repeticoes, entradas=entradas, chamadas_previstas=chamadas, origens=origens(), codigo=hashes_codigo(),
         versoes=dict(extracao=X.VERSAO, ia_sozinha=D.VERSAO, conteudo=C.VERSAO),
         prompts=dict(extracao=hash_json(X.SISTEMA), ia_sozinha=hash_json(D.SISTEMA)), catalogo_hash=hash_json(catalogo),
-        regra_agregacao=AF.REGRA_AGREGACAO, grupos_d=[list(g) for g in AF.GRUPOS_D],
+        regra_agregacao=AF.REGRA_AGREGACAO, regra_e=AF.REGRA_E, modo_validacao=modo_validacao, grupos_d=[list(g) for g in AF.GRUPOS_D],
         gabarito=dict(sha256=lote.sha(AF.GABARITO), estado=gab['estado'], kappa=gab['concordancia']['kappa_cohen']),
         metricas='Principal: precisão, revocação e F1 de REVISAR por par (evento, trecho). Secundárias: acurácia em 4 classes '
                  '(REVISAR, DECISAO_HUMANA, PRESERVAR, NAO_REVISAR) e 5 rótulos, falsos alertas em trechos corretos, '
@@ -87,6 +88,7 @@ def preparar(destino, repeticoes=REPETICOES):
 
 def validar_manifesto(pasta):
     m = ler(pasta/'manifesto.json')
+    AF.configurar(m.get('rodada', 'final'))
     exigir(m['hash'] == hash_json({k: v for k, v in m.items() if k != 'hash'}), 'Manifesto adulterado')
     exigir(m['codigo'] == hashes_codigo(), 'Implementação mudou desde o preparo')
     exigir(m['modelo'] == MODELO and m['configuracao'] == CONFIG, 'Configuração mudou')
@@ -119,7 +121,8 @@ def executar_tarefa(pasta, t, rep, m, chave, *, http=None):
             max_tokens_saida=16000, max_segundos=600, max_custo_centavos=1.5))
         adaptador = X.TransporteExtracaoReal(transporte)
         if t['condicao'] == 'B':
-            r = X.ExtratorIA(adaptador, modelo=MODELO, configuracao=CONFIG, modo='ia_real').extrair(t['documento'], sessao=sessao)
+            r = X.ExtratorIA(adaptador, modelo=MODELO, configuracao=CONFIG, modo='ia_real',
+                             modo_validacao=m.get('modo_validacao', 'estrito')).extrair(t['documento'], sessao=sessao)
             ok = r['estado'] == 'extracao_recebida'
         else:
             r = D.AnotadorIA(adaptador, modelo=MODELO, configuracao=CONFIG, modo='ia_real').anotar(t['evento'], t['documentos'], sessao=sessao)
@@ -132,61 +135,114 @@ def executar_tarefa(pasta, t, rep, m, chave, *, http=None):
         transporte.db.close()
 
 
-def comparar(pasta, m):
+def _extracoes_b(pasta, rep, docs, modo, modo_manifesto, catalogo, versao=None):
+    """Extração válida de cada documento numa repetição; revalida a resposta bruta se o modo pedido difere do congelado."""
+    saida = {}
+    for d in docs:
+        arq = pasta/'casos'/f"r{rep}_B_{d['id']}.json"
+        if not arq.exists():
+            continue
+        reg = ler(arq)
+        res = reg.get('resultado') or {}
+        if modo == modo_manifesto:
+            if reg['estado'] == 'concluido':
+                saida[d['id']] = res['extracao']
+            continue
+        if res.get('resposta_bruta'):
+            try:
+                saida[d['id']] = X.validar_extracao(json.loads(res['resposta_bruta']), d, catalogo, modo=modo, versao=versao)
+            except Exception:
+                pass
+    return saida
+
+
+def _anotacoes_d(pasta, rep, ev):
+    an = {}
+    for n in range(1, len(AF.GRUPOS_D)+1):
+        arq = pasta/'casos'/f'r{rep}_D_{ev}_G{n}.json'
+        if arq.exists():
+            reg = ler(arq)
+            if reg['estado'] == 'concluido':
+                an.update(reg['resultado']['anotacoes'])
+    return an
+
+
+def comparar(pasta, m, *, modo_validacao=None, arquivo='comparacao.json', natureza='resultado_principal_congelado'):
+    """Métricas de B, D, E (B+D) e das variantes com voto entre as leituras de B.
+
+    Com `modo_validacao` diferente do congelado, as respostas brutas de B são revalidadas
+    (análise pós-hoc, gravada em outro arquivo).
+    """
     docs = AF.documentos_finais()
-    gab_meta, gab = AF.carregar_gabarito()
+    catalogo = X.catalogo_entidades()
+    _, gab = AF.carregar_gabarito()
     exigir(lote.sha(AF.GABARITO) == m['gabarito']['sha256'], 'Gabarito mudou desde o preparo')
-    resultados = {e: simular(e, 'final') for e in AF.EVENTOS}
-    cenarios = {e: ler_cenario(e, 'final') for e in AF.EVENTOS}
-    saida = dict(manifesto=m['id'], regra_agregacao=m['regra_agregacao'], gabarito=m['gabarito'], repeticoes={}, consumo={}, erros={})
-    por_cond = {'B': [], 'D': []}
-    consumo = {'B': Counter(), 'D': Counter()}
-    erros = {'B': Counter(), 'D': Counter()}
-    for rep in range(1, m['repeticoes']+1):
-        regs = {}
-        for e in m['entradas']:
-            p = pasta/'casos'/f"r{rep}_{e['id']}.json"
-            if p.exists():
-                regs[e['id']] = ler(p)
-        for reg in regs.values():
-            uso = reg.get('sessao_revisao', {}).get('consumo', {})
-            for k in ('chamadas_api', 'tokens_entrada', 'tokens_saida', 'custo_api_usd', 'comprometido_api_usd'):
-                consumo[reg['condicao']][k] += uso.get(k, 0)
-            erros[reg['condicao']].update(x['codigo'] for x in (reg.get('resultado') or {}).get('erros', []))
-        # Condição B
-        extr = [regs[f'B_{d["id"]}']['resultado']['extracao'] for d in docs
-                if regs.get(f'B_{d["id"]}', {}).get('estado') == 'concluido']
-        pred_b, mot_b = {}, {}
+    modo_manifesto = m.get('modo_validacao', 'estrito')
+    modo = modo_validacao or modo_manifesto
+    AF.configurar(m.get('rodada', 'final'))
+    resultados = {e: simular(e, AF.PARTICAO) for e in AF.EVENTOS}
+    cenarios = {e: ler_cenario(e, AF.PARTICAO) for e in AF.EVENTOS}
+    reps = list(range(1, m['repeticoes']+1))
+    ext = {r: _extracoes_b(pasta, r, docs, modo, modo_manifesto, catalogo, m.get('versoes', {}).get('extracao')) for r in reps}
+    anot = {(r, ev): _anotacoes_d(pasta, r, ev) for r in reps for ev in AF.EVENTOS}
+    voto = {}
+    for d in docs:
+        leituras = [ext[r][d['id']] for r in reps if d['id'] in ext[r]]
+        if leituras:
+            voto[d['id']] = X.combinar_extracoes(leituras, d)
+
+    def condicao_b(extracoes, d_rep=None):
+        pred, mot, pred_e, mot_e = {}, {}, {}, {}
         for ev in AF.EVENTOS:
-            rev = C.revisar_documentos(resultados[ev], cenarios[ev], extr, condicao='B')
+            rev = C.revisar_documentos(resultados[ev], cenarios[ev], list(extracoes.values()), condicao='B')
             for t, r in AF.agregar_b(rev, docs).items():
-                pred_b[(ev, t)] = r
+                pred[(ev, t)] = r
             for t, ms in AF.motivos_b(rev).items():
-                mot_b[(ev, t)] = ms
-        # Condição D
-        pred_d, mot_d = {}, {}
+                mot[(ev, t)] = ms
+            if d_rep is not None:
+                re_, me_ = AF.agregar_e(rev, anot[(d_rep, ev)], docs)
+                for t, r in re_.items():
+                    pred_e[(ev, t)] = r
+                for t, ms in me_.items():
+                    mot_e[(ev, t)] = ms
+        return pred, mot, pred_e, mot_e
+
+    por = {c: [] for c in ('B', 'D', 'E', 'E_voto')}
+    saida = dict(manifesto=m['id'], natureza=natureza, modo_validacao=modo, regra_agregacao=m['regra_agregacao'],
+                 regra_e=AF.REGRA_E, gabarito=m['gabarito'], repeticoes={})
+    pb_voto, mb_voto, _, _ = condicao_b(voto)
+    saida['B_voto'] = AF.metricas(pb_voto, gab, mb_voto)
+    saida['B_voto']['documentos_com_leitura'] = len(voto)
+    for r in reps:
+        pb, mb, pe, me = condicao_b(ext[r], r)
+        _, _, pev, mev = condicao_b(voto, r)
+        pd, md = {}, {}
         for ev in AF.EVENTOS:
-            for n, g in enumerate(AF.GRUPOS_D, 1):
-                reg = regs.get(f'D_{ev}_G{n}')
-                ok = reg and reg['estado'] == 'concluido'
-                for d in docs:
-                    if d['id'] not in g:
-                        continue
-                    for t in d['trechos']:
-                        a = reg['resultado']['anotacoes'][t['id']] if ok else None
-                        pred_d[(ev, t['id'])] = a['rotulo'] if a else 'FALHA'
-                        if a:
-                            mot_d[(ev, t['id'])] = {i['motivo'] for i in a['informacoes']}
-        mb, md = AF.metricas(pred_b, gab, mot_b), AF.metricas(pred_d, gab, mot_d)
-        por_cond['B'].append(mb); por_cond['D'].append(md)
-        saida['repeticoes'][rep] = dict(B=mb, D=md)
-        gravar(pasta/f'predicoes_r{rep}.json', dict(B={f'{k[0]}|{k[1]}': v for k, v in pred_b.items()},
-                                                     D={f'{k[0]}|{k[1]}': v for k, v in pred_d.items()}))
-    saida['resumo'] = {c: AF.resumo_repeticoes(v) for c, v in por_cond.items()}
+            for d in docs:
+                for t in d['trechos']:
+                    a = anot[(r, ev)].get(t['id'])
+                    pd[(ev, t['id'])] = a['rotulo'] if a else 'FALHA'
+                    if a:
+                        md[(ev, t['id'])] = {i['motivo'] for i in a['informacoes']}
+        res = dict(B=AF.metricas(pb, gab, mb), D=AF.metricas(pd, gab, md), E=AF.metricas(pe, gab, me), E_voto=AF.metricas(pev, gab, mev))
+        res['B']['documentos_com_leitura'] = len(ext[r])
+        for c in por:
+            por[c].append(res[c])
+        saida['repeticoes'][r] = res
+        if arquivo == 'comparacao.json':
+            gravar(pasta/f'predicoes_r{r}.json', {c: {f'{k[0]}|{k[1]}': v for k, v in p.items()} for c, p in (('B', pb), ('D', pd), ('E', pe), ('E_voto', pev))})
+    saida['resumo'] = {c: AF.resumo_repeticoes(v) for c, v in por.items()}
+    consumo, erros = {'B': Counter(), 'D': Counter()}, {'B': Counter(), 'D': Counter()}
+    for arq in (pasta/'casos').glob('*.json'):
+        reg = ler(arq)
+        uso = reg.get('sessao_revisao', {}).get('consumo', {})
+        for k in ('chamadas_api', 'tokens_entrada', 'tokens_saida', 'custo_api_usd', 'comprometido_api_usd'):
+            consumo[reg['condicao']][k] += uso.get(k, 0)
+        erros[reg['condicao']].update(x['codigo'] for x in (reg.get('resultado') or {}).get('erros', []))
     saida['consumo'] = {c: dict(v) for c, v in consumo.items()}
     saida['erros'] = {c: dict(v) for c, v in erros.items()}
     saida['comprometido_historico_total_usd'] = (lote.comprometido(lote.HISTORICO)+lote.comprometido(lote.LEDGER))/1e9
-    gravar(pasta/'comparacao.json', saida)
+    gravar(pasta/arquivo, saida)
     return saida
 
 
@@ -234,9 +290,11 @@ def main():
     p.add_argument('pasta')
     p.add_argument('--autorizacao', default='')
     p.add_argument('--repeticao', type=int, action='append')
+    p.add_argument('--posthoc-modo-validacao', choices=('estrito', 'parcial'))
+    p.add_argument('--rodada', choices=tuple(AF.RODADAS), default='final')
     a = p.parse_args()
     if a.acao == 'preparar':
-        m = preparar(a.pasta)
+        m = preparar(a.pasta, rodada=a.rodada)
         print(json.dumps(dict(manifesto=m['id'], chamadas=m['chamadas_previstas'], reserva_maxima_usd=m['teto_rodada_nano']/1e9,
                               comprometido_antes_usd=m['comprometido_antes_nano']/1e9), ensure_ascii=False))
     elif a.acao == 'executar':
@@ -244,8 +302,14 @@ def main():
         print(json.dumps(dict(estado=r['estado'], tarefas=len(r['tarefas'])), ensure_ascii=False))
     else:
         pasta = Path(a.pasta)
-        r = comparar(pasta, validar_manifesto(pasta))
-        print(json.dumps(r['resumo'], ensure_ascii=False, indent=1))
+        m = validar_manifesto(pasta) if not a.posthoc_modo_validacao else ler(pasta/'manifesto.json')
+        if a.posthoc_modo_validacao:
+            r = comparar(pasta, m, modo_validacao=a.posthoc_modo_validacao, arquivo=f'comparacao_posthoc_{a.posthoc_modo_validacao}.json',
+                         natureza='PÓS-HOC: código e/ou validação diferentes dos congelados; não substitui o resultado principal')
+        else:
+            r = comparar(pasta, m)
+        print(json.dumps({c: {k: (round(v['media'], 3) if isinstance(v, dict) and v else v) for k, v in s.items()} for c, s in r['resumo'].items()}, ensure_ascii=False, indent=1))
+        print('B_voto', json.dumps({k: r['B_voto'][k] for k in ('revisar', 'acuracia_4_classes', 'falhas')}, ensure_ascii=False))
 
 
 if __name__ == '__main__':

@@ -9,10 +9,23 @@ import json
 
 from . import DATA
 
+RODADAS = {'final': dict(pasta='final', prefixo='F', particao='final'),
+           'final2': dict(pasta='final2', prefixo='G', particao='final2')}
+RODADA = 'final'
 PASTA = DATA/'final'
 MATERIAL = PASTA/'material_gerado.json'
 GABARITO = PASTA/'gabarito_final.json'
 EVENTOS = tuple(f'F{i:02}' for i in range(1, 16))
+PARTICAO = 'final'
+
+
+def configurar(rodada='final'):
+    """Seleciona material, gabarito, eventos e partição da rodada (final ou final2)."""
+    global RODADA, PASTA, MATERIAL, GABARITO, EVENTOS, PARTICAO
+    c = RODADAS[rodada]
+    RODADA, PASTA, PARTICAO = rodada, DATA/c['pasta'], c['particao']
+    MATERIAL, GABARITO = PASTA/'material_gerado.json', PASTA/'gabarito_final.json'
+    EVENTOS = tuple(f"{c['prefixo']}{i:02}" for i in range(1, 16))
 GRUPOS_D = (('STATUS_A', 'STATUS_B'), ('STATUS_C', 'STATUS_D'), ('ACTION_LOG', 'RISK_REGISTER', 'DECISION_LOG'))
 VERSAO_DOCUMENTO = '1-final'
 
@@ -125,3 +138,64 @@ def resumo_repeticoes(lista):
 def carregar_gabarito():
     g = json.loads(GABARITO.read_text())
     return g, {(a['evento'], a['trecho_id']): dict(rotulo=a['rotulo'], motivos=a['motivos']) for a in g['anotacoes']}
+
+
+REGRA_E = (
+    'Condição E (a IA propõe, o código confere), por trecho: Decision Log → PRESERVAR. Se o código achou alguma afirmação '
+    '"revisar" → REVISAR. Senão, se a IA sozinha disse REVISAR, mantém REVISAR só pelas informações citadas que não se '
+    'sobrepõem a nenhuma afirmação já conferida pelo código (o código prevalece sobre números que ele verificou). Senão, '
+    'julgamento humano do código ou DECISAO_HUMANA da IA → DECISAO_HUMANA; com afirmações conferidas → CORRETO; sem '
+    'afirmações → rótulo não-REVISAR da IA ou SEM_AFIRMACAO. Leitura que falhou é substituída pela outra; as duas → FALHA.')
+
+
+def _span(texto, citacao):
+    from .extracao import casar_citacao
+    lit = casar_citacao(citacao, texto) if citacao else None
+    if lit is None:
+        return None
+    i = texto.find(lit)
+    return (i, i+len(lit))
+
+
+def _sobrepoe(a, b):
+    return a is not None and b is not None and a[0] < b[1] and b[0] < a[1]
+
+
+def agregar_e(revisao_b, anotacoes_d, documentos):
+    """Rótulos e motivos por trecho da condição E, a partir de B (pode faltar documento) e D (pode faltar trecho)."""
+    por_doc = {(d['documento_id'], d['versao']): d for d in (revisao_b or {}).get('documentos', [])}
+    rotulos, motivos = {}, {}
+    for d in documentos:
+        aval = por_doc.get((d['id'], d['versao']))
+        for t in d['trechos']:
+            tid, ad = t['id'], (anotacoes_d or {}).get(t['id'])
+            if d['artefato'] == 'decision_log':
+                rotulos[tid] = 'PRESERVAR' if aval is not None or ad is not None else 'FALHA'
+                continue
+            if aval is None and ad is None:
+                rotulos[tid] = 'FALHA'
+                continue
+            if aval is None:
+                rotulos[tid] = ad['rotulo']
+                motivos[tid] = {i['motivo'] for i in ad['informacoes']}
+                continue
+            claims = [a for a in aval['afirmacoes'] if a['afirmacao']['trecho_id'] == tid]
+            estados = [a['estado'] for a in claims]
+            if 'revisar' in estados:
+                rotulos[tid] = 'REVISAR'
+                motivos[tid] = {a['motivo'] for a in claims if a['estado'] == 'revisar'}
+                continue
+            if ad is not None and ad['rotulo'] == 'REVISAR':
+                spans = [_span(t['texto'], a['afirmacao']['citacao']) for a in claims]
+                fora = [i for i in ad['informacoes'] if not any(_sobrepoe(_span(t['texto'], i['citacao']), s) for s in spans)]
+                if fora:
+                    rotulos[tid] = 'REVISAR'
+                    motivos[tid] = {i['motivo'] for i in fora}
+                    continue
+            if 'julgamento_humano' in estados or (ad is not None and ad['rotulo'] == 'DECISAO_HUMANA'):
+                rotulos[tid] = 'DECISAO_HUMANA'
+            elif claims:
+                rotulos[tid] = 'CORRETO'
+            else:
+                rotulos[tid] = ad['rotulo'] if ad is not None and ad['rotulo'] in ('CORRETO', 'SEM_AFIRMACAO') else 'SEM_AFIRMACAO'
+    return rotulos, motivos

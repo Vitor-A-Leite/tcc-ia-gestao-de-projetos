@@ -10,6 +10,7 @@ from unittest.mock import patch
 from ..scripts import avaliacao_final as AV
 from ..src import avaliacao_final as AF
 from ..src import ia_sozinha as D
+from ..src import extracao as X
 from ..src import lote_ia as lote
 from ..src.ia_real import MODELO
 from ..src.vendor.interpretacao_no.contratos import hash_json
@@ -49,10 +50,10 @@ class AvaliacaoFinalTests(unittest.TestCase):
         dados = json.loads(bruto)
         if nome == 'extracao_afirmacoes':
             doc = dados['documento']
-            resp = dict(versao='3-extracao-afirmacoes', documento_id=doc['id'], versao_documento=doc['versao'], afirmacoes=[],
+            resp = dict(versao=X.VERSAO, documento_id=doc['id'], versao_documento=doc['versao'], afirmacoes=[],
                         nao_mapeados=[dict(trecho_id=t['id'], razao='sem_afirmacao_verificavel') for t in doc['trechos']])
             if doc['id'] in self.falhar:
-                resp['nao_mapeados'] = resp['nao_mapeados'][1:]
+                resp['documento_id'] = 'OUTRO'
         else:
             ev = dados['evento']['id']
             anot = []
@@ -80,6 +81,10 @@ class AvaliacaoFinalTests(unittest.TestCase):
         self.assertEqual(c['repeticoes']['1']['B']['falhas'], 0)
         self.assertEqual(c['consumo']['B']['chamadas_api'], 14)
         self.assertEqual(c['consumo']['D']['chamadas_api'], 90)
+        # E: B sem afirmações não contradiz D, então E herda os acertos de D.
+        self.assertEqual(c['repeticoes']['1']['E']['revisar']['f1'], 1.0)
+        self.assertEqual(c['B_voto']['revisar']['vp'], 0)
+        self.assertEqual(c['modo_validacao'], 'parcial')
         carteira = lote.LEDGER.read_bytes()
         n = len(self.pedidos)
         self.executar()
@@ -94,7 +99,8 @@ class AvaliacaoFinalTests(unittest.TestCase):
         self.executar(repeticoes=[2])
         c = AV.ler(self.pasta/'comparacao.json')
         self.assertEqual(c['repeticoes']['1']['B']['falhas'], 4*15)
-        self.assertEqual(c['erros']['B'], {'cobertura_incompleta': 2})
+        self.assertEqual(c['erros']['B'], {'schema_invalido': 2})
+        self.assertEqual(c['repeticoes']['1']['E']['falhas'], 0)  # D cobre o documento que B perdeu
 
     def test_manifesto_recusa_alteracao_e_exige_autorizacao(self):
         with self.assertRaises(Exception):
@@ -106,6 +112,32 @@ class AvaliacaoFinalTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.executar()
         self.assertEqual(self.pedidos, [])
+
+    def test_retomada_tecnica_refaz_so_falhas_de_rede(self):
+        from ..scripts import retomada_tecnica as RT
+        from ..src.vendor.interpretacao_no.adaptadores import FalhaTransporte
+        cair = {'D_F01_G1', 'D_F02_G2'}
+        original = self.http
+        def http(path, pedido):
+            if not path:
+                dados = json.loads(pedido['input'][1]['content'])
+                if 'evento' in dados and f"D_{dados['evento']['id']}_G{1 if dados['documentos'][0]['id']=='STATUS_A' else 2 if dados['documentos'][0]['id']=='STATUS_C' else 3}" in cair:
+                    cair.discard(f"D_{dados['evento']['id']}_G{1 if dados['documentos'][0]['id']=='STATUS_A' else 2 if dados['documentos'][0]['id']=='STATUS_C' else 3}")
+                    raise FalhaTransporte('rede', 'queda simulada')
+            return original(path, pedido)
+        AV.executar(self.pasta, autorizacao='Teste', http=http, repeticoes=[1])
+        self.assertEqual(AV.ler(self.pasta/'casos'/'r1_D_F01_G1.json')['estado'], 'falha')
+        n = len(self.pedidos)
+        r = RT.executar(self.pasta, autorizacao='Teste retomada', http=self.http)
+        self.assertEqual(r['refeitas'], {'r1_D_F01_G1': 'concluido', 'r1_D_F02_G2': 'concluido'})
+        self.assertEqual(len(r['pendentes']), 52)  # repetição 2 inteira
+        self.assertTrue((self.pasta/'casos'/'_tentativas_originais'/'r1_D_F01_G1.json').exists())
+        self.assertTrue((self.pasta/'comparacao.json').exists())
+        n2 = len(self.pedidos)
+        r = RT.executar(self.pasta, autorizacao='Teste retomada', http=self.http)  # nada a refazer
+        self.assertEqual((r['refeitas'], r['pendentes']), ({}, {}))
+        self.assertEqual(len(self.pedidos), n2)
+        self.assertGreater(n2, n)
 
     def test_agregacao_b(self):
         docs = AF.documentos_finais()
